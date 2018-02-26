@@ -1,0 +1,6 @@
+*.pyc
+*.bak
+build/
+dist/
+hitran_api.egg-info/
+*~
