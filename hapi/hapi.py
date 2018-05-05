@@ -1689,7 +1689,7 @@ def storage2cache(TableName):
             end = start + size
             def cfunc(line, dtype=dtype, start=start, end=end):
                 return dtype(line[start:end])
-            cfunc.__doc__ = 'converter {} {}'.format(qnt, fmt)
+            #cfunc.__doc__ = 'converter {} {}'.format(qnt, fmt) # doesn't work in earlier versions of Python
             converters.append(cfunc)
             start = end
         data_matrix = [[cvt(line) for cvt in converters] for line in InfileData]
@@ -11502,7 +11502,7 @@ def absorptionCoefficient_Doppler(Components=None,SourceTables=None,partitionFun
                                   GammaL='dummy', HITRAN_units=True, LineShift=True,
                                   File=None, Format=None, OmegaGrid=None,
                                   WavenumberRange=None,WavenumberStep=None,WavenumberWing=None,
-                                  WavenumberWingHW=None,WavenumberGrid=None):   
+                                  WavenumberWingHW=None,WavenumberGrid=None,Diluent=None):   
     """
     INPUT PARAMETERS: 
         Components:  list of tuples [(M,I,D)], where
