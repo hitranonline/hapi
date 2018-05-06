@@ -23,6 +23,7 @@ import json
 import os, os.path
 import re
 from os import listdir
+import numpy as np
 from numpy import zeros,array,zeros,setdiff1d,ndarray,arange
 from numpy import place,where,insert,real,polyval
 from numpy import complex128,complex64,int64,int32,float64,float32
@@ -48,7 +49,8 @@ try:
 except ImportError:
     import urllib2
 
-HAPI_VERSION = '1.1.0.7.3' 
+HAPI_VERSION = '1.1.0.7.4' 
+__version__ = HAPI_VERSION
 # CHANGES:
 # FIXED GRID BUG (ver. 1.1.0.1)
 # FIXED OUTPUT FORMAT FOR CROSS-SECTIONS (ver. 1.1.0.1)
@@ -61,6 +63,7 @@ HAPI_VERSION = '1.1.0.7.3'
 # FIXED A "LONELY HEADER" BUG IN CACHE2STORAGE (ver. 1.1.0.7.1) 
 # ADDED SUPPORT FOR PHOSGENE AND CYANOGEN (ver. 1.1.0.7.2) 
 # OPTIMIZED STORAGE2CACHE (by Nils-Holger Löber) (ver. 1.1.0.7.3) 
+# ADDED SKIPABLE PARAMETERS IN HEADERS (ver. 1.1.0.7.4) 
 
 # version header
 print('HAPI version: %s' % HAPI_VERSION)
@@ -581,6 +584,48 @@ HITRAN_DEFAULT_HEADER = {
     "gamma_self": "Self-broadened HWHM at 1 atm pressure and 296 K", 
     "global_lower_quanta": "Electronic and vibrational quantum numbers and labels for the lower state of a transition"
   },
+  "position": {
+    "molec_id": 0,
+    "local_iso_id": 2,
+    "nu": 3,
+    "sw": 15,
+    "a": 25,
+    "gamma_air": 35,
+    "gamma_self": 40,
+    "elower": 45,
+    "n_air": 55,
+    "delta_air": 59,
+    "global_upper_quanta": 67,
+    "global_lower_quanta": 82,
+    "local_upper_quanta": 97,
+    "local_lower_quanta": 112,
+    "ierr": 127,
+    "iref": 133,
+    "line_mixing_flag": 145,
+    "gp": 146,
+    "gpp": 153,
+  },
+  'cast': {
+    "molec_id": "uint8",
+    "local_iso_id": "uint8",
+    "nu": "float32",
+    "sw": "float62",
+    "a": "float62",
+    "gamma_air": "float16",
+    "gamma_self": "float16",
+    "elower": "float32",
+    "n_air": "float16",
+    "delta_air": "float16",
+    "global_upper_quanta": "str",
+    "global_lower_quanta": "str",
+    "local_upper_quanta": "str",
+    "local_upper_quanta": "str",
+    "ierr": "str",
+    "iref": "str",
+    "line_mixing_flag": "str",
+    "gp": "int16",
+    "gpp": "int16",  
+  }
 }
 
 PARAMETER_META = \
@@ -1617,7 +1662,7 @@ def cache2storage(TableName):
     TableHeader = getTableHeader(TableName)
     OutfileHeader.write(json.dumps(TableHeader,indent=2))
     
-def storage2cache(TableName):
+def storage2cache(TableName,cast=True):
     """read speedup by Loeber"""
     #print 'storage2cache:'
     #print('TableName',TableName)
@@ -1678,9 +1723,14 @@ def storage2cache(TableName):
         quantities = header['order']
         formats = [header['format'][qnt] for qnt in quantities]
         types = {'d':int, 'f':float, 'E':float, 's':str}
-        start = 0
         converters = []
+        end = 0
         for qnt, fmt in zip(quantities, formats):
+            # pre-defined positions are needed to skip the existing parameters in headers (new feature)
+            if 'position' in header:
+                start = header['position'][qnt]
+            else:
+                start = end
             dtype = types[fmt[-1]]
             aux = fmt[fmt.index('%')+1:-1]
             if '.' in aux:
@@ -1691,11 +1741,11 @@ def storage2cache(TableName):
                 return dtype(line[start:end])
             #cfunc.__doc__ = 'converter {} {}'.format(qnt, fmt) # doesn't work in earlier versions of Python
             converters.append(cfunc)
-            start = end
+            #start = end
         data_matrix = [[cvt(line) for cvt in converters] for line in InfileData]
         data_columns = zip(*data_matrix)
         for qnt, col in zip(quantities, data_columns):
-            LOCAL_TABLE_CACHE[TableName]['data'][qnt].extend(col)
+            LOCAL_TABLE_CACHE[TableName]['data'][qnt].extend(col)               
             #LOCAL_TABLE_CACHE[TableName]['data'][qnt] = list(col)
             #LOCAL_TABLE_CACHE[TableName]['data'][qnt] = col
         header['number_of_rows'] = line_count = (
@@ -3208,6 +3258,7 @@ def prepareHeader(parlist):
         HEADER['format'] = HITRAN_DEFAULT_HEADER['format']
         HEADER['default'] = HITRAN_DEFAULT_HEADER['default']
         HEADER['description'] = HITRAN_DEFAULT_HEADER['description']
+        HEADER['position'] = HITRAN_DEFAULT_HEADER['position']
 
     # Insert all other parameters in the "extra" section of the header.
     plist = [v for v in parlist if v!='par_line']
