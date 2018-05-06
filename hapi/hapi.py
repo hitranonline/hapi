@@ -49,7 +49,7 @@ try:
 except ImportError:
     import urllib2
 
-HAPI_VERSION = '1.1.0.7.4' 
+HAPI_VERSION = '1.1.0.7.6' 
 __version__ = HAPI_VERSION
 # CHANGES:
 # FIXED GRID BUG (ver. 1.1.0.1)
@@ -64,7 +64,8 @@ __version__ = HAPI_VERSION
 # ADDED SUPPORT FOR PHOSGENE AND CYANOGEN (ver. 1.1.0.7.2) 
 # OPTIMIZED STORAGE2CACHE (by Nils-Holger Löber) (ver. 1.1.0.7.3) 
 # ADDED SKIPABLE PARAMETERS IN HEADERS (ver. 1.1.0.7.4) 
-# ADDED SUPPORT FOR FORTRAN D-NOTATION (ver. 1.1.0.7.4)
+# ADDED SUPPORT FOR FORTRAN D-NOTATION (ver. 1.1.0.7.5)
+# ADDED SUPPORT FOR WEIRD-FORMATTED INTENSITY VALUES E.G. "2.700-164" (ver. 1.1.0.7.6)
 
 # version header
 print('HAPI version: %s' % HAPI_VERSION)
@@ -1744,7 +1745,15 @@ def storage2cache(TableName,cast=True):
                     try:
                         return dtype(line[start:end])
                     except ValueError: # possible D exponent instead of E 
-                        return dtype(line[start:end].replace('D','E'))
+                        try:
+                            return dtype(line[start:end].replace('D','E'))
+                        except ValueError: # this is a special case and it should not be in the main version tree!
+                            # Dealing with the weird and unparsable intensity format such as "2.700-164, i.e with no E or D characters.
+                            res = re.search('(\d\.\d\d\d)\-(\d\d\d)',line[start:end])
+                            if res:
+                                return dtype(res.group(1)+'E-'+res.group(2))
+                            else:
+                                raise Exception('PARSE ERROR: unknown format of the par value (%s)'%line[start:end])
                 else:
                     return dtype(line[start:end])
             #cfunc.__doc__ = 'converter {} {}'.format(qnt, fmt) # doesn't work in earlier versions of Python
