@@ -64,6 +64,7 @@ __version__ = HAPI_VERSION
 # ADDED SUPPORT FOR PHOSGENE AND CYANOGEN (ver. 1.1.0.7.2) 
 # OPTIMIZED STORAGE2CACHE (by Nils-Holger Löber) (ver. 1.1.0.7.3) 
 # ADDED SKIPABLE PARAMETERS IN HEADERS (ver. 1.1.0.7.4) 
+# ADDED SUPPORT FOR FORTRAN D-NOTATION (ver. 1.1.0.7.4)
 
 # version header
 print('HAPI version: %s' % HAPI_VERSION)
@@ -1738,7 +1739,14 @@ def storage2cache(TableName,cast=True):
             size = int(aux)
             end = start + size
             def cfunc(line, dtype=dtype, start=start, end=end):
-                return dtype(line[start:end])
+                # return dtype(line[start:end]) # this will fail on the float number with D exponent (Fortran notation)
+                if dtype==float:
+                    try:
+                        return dtype(line[start:end])
+                    except ValueError: # possible D exponent instead of E 
+                        return dtype(line[start:end].replace('D','E'))
+                else:
+                    return dtype(line[start:end])
             #cfunc.__doc__ = 'converter {} {}'.format(qnt, fmt) # doesn't work in earlier versions of Python
             converters.append(cfunc)
             #start = end
