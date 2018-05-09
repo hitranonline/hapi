@@ -49,7 +49,7 @@ try:
 except ImportError:
     import urllib2
 
-HAPI_VERSION = '1.1.0.8' 
+HAPI_VERSION = '1.1.0.8.2' 
 __version__ = HAPI_VERSION
 # CHANGES:
 # FIXED GRID BUG (ver. 1.1.0.1)
@@ -67,6 +67,8 @@ __version__ = HAPI_VERSION
 # ADDED SUPPORT FOR FORTRAN D-NOTATION (ver. 1.1.0.7.5)
 # ADDED SUPPORT FOR WEIRD-FORMATTED INTENSITY VALUES E.G. "2.700-164" (ver. 1.1.0.7.6)
 # ADDED TIPS-2017 (ver. 1.1.0.8)
+# ADDED SUPPORT FOR CUSTOM EXTENSIONS OF THE DATA FILES (ver. 1.1.0.8.1)
+# FIXED LINK TO (2,0) ISOTOPOLOGUE IN TIPS-2017 (ver. 1.1.0.8.2)
 
 # version header
 print('HAPI version: %s' % HAPI_VERSION)
@@ -1419,9 +1421,10 @@ def transport2object(TransportData):
 def object2transport(ObjectData):
     pass
 
-def getFullTableAndHeaderName(TableName):
+def getFullTableAndHeaderName(TableName,ext=None):
     #print('TableName=',TableName)
-    fullpath_data = VARIABLES['BACKEND_DATABASE_NAME'] + '/' + TableName + '.data'
+    if ext is None: ext = 'data'
+    fullpath_data = VARIABLES['BACKEND_DATABASE_NAME'] + '/' + TableName + '.' + ext
     if not os.path.isfile(fullpath_data):
         fullpath_data = VARIABLES['BACKEND_DATABASE_NAME'] + '/' + TableName + '.par'
         if not os.path.isfile(fullpath_data) and TableName!='sampletab':
@@ -1665,11 +1668,11 @@ def cache2storage(TableName):
     TableHeader = getTableHeader(TableName)
     OutfileHeader.write(json.dumps(TableHeader,indent=2))
     
-def storage2cache(TableName,cast=True):
+def storage2cache(TableName,cast=True,ext=None):
     """read speedup by Loeber"""
     #print 'storage2cache:'
     #print('TableName',TableName)
-    fullpath_data,fullpath_header = getFullTableAndHeaderName(TableName)
+    fullpath_data,fullpath_header = getFullTableAndHeaderName(TableName,ext)
     InfileData = open(fullpath_data,'r')
     InfileHeader = open(fullpath_header,'r')
     #try:
@@ -10884,6 +10887,10 @@ TIPS_2017_ISOQ_HASH[(M,I)] = float64([
     1.940290E+06, 1.972979E+06, 2.006060E+06, 2.039536E+06, 2.073408E+06, 2.107678E+06,
     2.142350E+06, 2.177424E+06, 2.212904E+06, 2.248791E+06, 2.285086E+06,
 ])
+
+#  --------------- CO2 838: M = 2, I = 0 ALIAS-----------------
+TIPS_2017_ISOT_HASH[(M,0)] = TIPS_2017_ISOT[0]
+TIPS_2017_ISOQ_HASH[(M,0)] = TIPS_2017_ISOQ_HASH[(M,I)]
 
 #  ---------------------- M = 2, I = 11 ---------------------------
 M = 2
