@@ -49,7 +49,7 @@ try:
 except ImportError:
     import urllib2
 
-HAPI_VERSION = '1.1.0.8.2' 
+HAPI_VERSION = '1.1.0.8.3' 
 __version__ = HAPI_VERSION
 # CHANGES:
 # FIXED GRID BUG (ver. 1.1.0.1)
@@ -69,6 +69,7 @@ __version__ = HAPI_VERSION
 # ADDED TIPS-2017 (ver. 1.1.0.8)
 # ADDED SUPPORT FOR CUSTOM EXTENSIONS OF THE DATA FILES (ver. 1.1.0.8.1)
 # FIXED LINK TO (2,0) ISOTOPOLOGUE IN TIPS-2017 (ver. 1.1.0.8.2)
+# ADDED SAVEHEADER FUNCTION (ver. 1.1.0.8.3)
 
 # version header
 print('HAPI version: %s' % HAPI_VERSION)
@@ -3342,6 +3343,11 @@ def queryHITRAN(TableName,iso_id_list,numin,numax,pargroups=[],params=[],dotpar=
     storage2cache(TableName)
     print('PROCESSED')
 
+def saveHeader(TableName):
+    TableHeader = prepareHeader([])
+    with open(TableName+'.header','w') as fp:
+       fp.write(json.dumps(TableHeader,indent=2))
+    
 # NODE CODE 
 NODE_READY = False
 
