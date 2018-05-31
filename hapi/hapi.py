@@ -3334,7 +3334,7 @@ def queryHITRAN(TableName,iso_id_list,numin,numax,pargroups=[],params=[],dotpar=
           if not chunk: break
           fp.write(chunk.decode('utf-8'))
           print('  %d bytes written to %s' % (CHUNK,DataFileName))
-    with open(HeaderFileName,'w') as fp:
+    with open(HeaderFileName,'w') as fp:       
        fp.write(json.dumps(TableHeader,indent=2))
        print('Header written to %s' % HeaderFileName)
     print('END DOWNLOAD')
@@ -3344,7 +3344,8 @@ def queryHITRAN(TableName,iso_id_list,numin,numax,pargroups=[],params=[],dotpar=
     print('PROCESSED')
 
 def saveHeader(TableName):
-    TableHeader = prepareHeader([])
+    ParameterList = prepareParlist(dotpar=True)    
+    TableHeader = prepareHeader(ParameterList)
     with open(TableName+'.header','w') as fp:
        fp.write(json.dumps(TableHeader,indent=2))
     
