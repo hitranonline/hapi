@@ -49,7 +49,7 @@ try:
 except ImportError:
     import urllib2
 
-HAPI_VERSION = '1.1.0.8.4' 
+HAPI_VERSION = '1.1.0.8.5' 
 __version__ = HAPI_VERSION
 # CHANGES:
 # FIXED GRID BUG (ver. 1.1.0.1)
@@ -71,12 +71,14 @@ __version__ = HAPI_VERSION
 # FIXED LINK TO (2,0) ISOTOPOLOGUE IN TIPS-2017 (ver. 1.1.0.8.2)
 # ADDED SAVEHEADER FUNCTION (ver. 1.1.0.8.3)
 # ADDED METADATA FOR SF6 (ver. 1.1.0.8.4)
+# ADDED D2O ISOTOPOLOGUE OF WATER TO DESCRIPTION (ver. 1.1.0.8.5)
 
 # version header
 print('HAPI version: %s' % HAPI_VERSION)
 print('To get the most up-to-date version please check http://hitran.org/hapi')
-print('ATTENTION: Python versions of partition sums from TIPS-2017 are available at http://hitran.org/suppl/TIPS/')
-print('           To use them in HAPI ver. 1.1.0.7, use partitionFunction parameter of the absorptionCoefficient_ routine.')
+print('ATTENTION: Python versions of partition sums from TIPS-2017 are now available in HAPI code')
+#print('ATTENTION: Python versions of partition sums from TIPS-2017 are available at http://hitran.org/suppl/TIPS/')
+#print('           To use them in HAPI ver. 1.1.0.7, use partitionFunction parameter of the absorptionCoefficient_ routine.')
 print('')
 print('           It is free to use HAPI. If you use HAPI in your research or software development,')
 print('           please cite it using the following reference:')
@@ -3425,6 +3427,7 @@ ISO_ID = {
       4 : [       1,   4,  'HD(16O)',                   0.00031069,         19.01674,       'H2O'     ],
       5 : [       1,   5,  'HD(18O)',                   0.000000623,        21.020985,      'H2O'     ],
       6 : [       1,   6,  'HD(17O)',                   0.000000116,        20.020956,      'H2O'     ],
+    129 : [       1,   7,  'D2(16O)',                   0.000000024197,     20.022915,      'H2O'     ],
       7 : [       2,   1,  '(12C)(16O)2',               0.984204,           43.98983,       'CO2'     ],
       8 : [       2,   2,  '(13C)(16O)2',               0.011057,           44.993185,      'CO2'     ],
       9 : [       2,   3,  '(16O)(12C)(18O)',           0.0039471,          45.994076,      'CO2'     ],
@@ -3512,7 +3515,7 @@ ISO_ID = {
      79 : [      28,   1,  '(31P)H3',                   0.99953283,         33.997238,      'PH3'     ],
      80 : [      29,   1,  '(12C)(16O)(19F)2',          0.98654,            65.991722,      'COF2'    ],
     119 : [      29,   2,  '(13C)(16O)(19F)2',          0.0110834,          66.995083,      'COF2'    ],
-    126 : [      30,   1,  '32S19F6',                   0.950180,          145.962492,      'SF6'     ],
+    126 : [      30,   1,  '(32S)(19F)6',               0.950180,          145.962492,      'SF6'     ],
      81 : [      31,   1,  'H2(32S)',                   0.94988,            33.987721,      'H2S'     ],
      82 : [      31,   2,  'H2(34S)',                   0.04214,            35.983515,      'H2S'     ],
      83 : [      31,   3,  'H2(33S)',                   0.007498,           34.987105,      'H2S'     ],
@@ -3567,6 +3570,7 @@ ISO = {
 (        1,   4    ): [      4,  'HD(16O)',                   0.00031069,         19.01674,       'H2O'     ],
 (        1,   5    ): [      5,  'HD(18O)',                   0.000000623,        21.020985,      'H2O'     ],
 (        1,   6    ): [      6,  'HD(17O)',                   0.000000116,        20.020956,      'H2O'     ],
+(        1,   7    ): [    129,  'D2(16O)',                   0.000000024197,     20.022915,      'H2O'     ],
 (        2,   1    ): [      7,  '(12C)(16O)2',               0.984204,           43.98983,       'CO2'     ],
 (        2,   2    ): [      8,  '(13C)(16O)2',               0.011057,           44.993185,      'CO2'     ],
 (        2,   3    ): [      9,  '(16O)(12C)(18O)',           0.0039471,          45.994076,      'CO2'     ],
@@ -3654,7 +3658,7 @@ ISO = {
 (       28,   1    ): [     79,  '(31P)H3',                   0.99953283,         33.997238,      'PH3'     ],
 (       29,   1    ): [     80,  '(12C)(16O)(19F)2',          0.98654,            65.991722,      'COF2'    ],
 (       29,   2    ): [    119,  '(13C)(16O)(19F)2',          0.0110834,          66.995083,      'COF2'    ],
-(       30,   1    ): [    126,  '32S19F6',                   0.950180,          145.962492,      'SF6'     ],
+(       30,   1    ): [    126,  '(32S)(19F)6',               0.950180,          145.962492,      'SF6'     ],
 (       31,   1    ): [     81,  'H2(32S)',                   0.94988,            33.987721,      'H2S'     ],
 (       31,   2    ): [     82,  'H2(34S)',                   0.04214,            35.983515,      'H2S'     ],
 (       31,   3    ): [     83,  'H2(33S)',                   0.007498,           34.987105,      'H2S'     ],
