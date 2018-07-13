@@ -19,6 +19,7 @@ Trying to retain functional style for this API.
 
 #import httplib
 #import urllib2
+import sys
 import json
 import os, os.path
 import re
@@ -48,8 +49,15 @@ try:
     import urllib.request as urllib2
 except ImportError:
     import urllib2
+if 'io' in sys.modules: # define open using Linux-style line endings
+    import io
+    def open_(*args,**argv):
+        argv.update(dict(newline='\n'))
+        return io.open(*args,**argv)
+else:
+    open_ = open
 
-HAPI_VERSION = '1.1.0.8.5' 
+HAPI_VERSION = '1.1.0.8.6' 
 __version__ = HAPI_VERSION
 # CHANGES:
 # FIXED GRID BUG (ver. 1.1.0.1)
@@ -72,6 +80,7 @@ __version__ = HAPI_VERSION
 # ADDED SAVEHEADER FUNCTION (ver. 1.1.0.8.3)
 # ADDED METADATA FOR SF6 (ver. 1.1.0.8.4)
 # ADDED D2O ISOTOPOLOGUE OF WATER TO DESCRIPTION (ver. 1.1.0.8.5)
+# FIXED LINE ENDINGS IN STORAGE2CACHE AND QUERYHITRAN (ver. 1.1.0.8.6)
 
 # version header
 print('HAPI version: %s' % HAPI_VERSION)
@@ -1677,7 +1686,7 @@ def storage2cache(TableName,cast=True,ext=None):
     #print 'storage2cache:'
     #print('TableName',TableName)
     fullpath_data,fullpath_header = getFullTableAndHeaderName(TableName,ext)
-    InfileData = open(fullpath_data,'r')
+    InfileData = open_(fullpath_data,'r')
     InfileHeader = open(fullpath_header,'r')
     #try:
     header_text = InfileHeader.read()
@@ -3331,7 +3340,7 @@ def queryHITRAN(TableName,iso_id_list,numin,numax,pargroups=[],params=[],dotpar=
         raise Exception('Cannot connect to %s. Try again or edit GLOBAL_HOST variable.' % GLOBAL_HOST)
     CHUNK = 64 * 1024
     print('BEGIN DOWNLOAD: '+TableName)
-    with open(DataFileName,'w') as fp:
+    with open_(DataFileName,'w') as fp:
        while True:
           chunk = req.read(CHUNK)
           if not chunk: break
