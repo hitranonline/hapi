@@ -57,7 +57,7 @@ if 'io' in sys.modules: # define open using Linux-style line endings
 else:
     open_ = open
 
-HAPI_VERSION = '1.1.0.8.6' 
+HAPI_VERSION = '1.1.0.8.7' 
 __version__ = HAPI_VERSION
 # CHANGES:
 # FIXED GRID BUG (ver. 1.1.0.1)
@@ -81,6 +81,7 @@ __version__ = HAPI_VERSION
 # ADDED METADATA FOR SF6 (ver. 1.1.0.8.4)
 # ADDED D2O ISOTOPOLOGUE OF WATER TO DESCRIPTION (ver. 1.1.0.8.5)
 # FIXED LINE ENDINGS IN STORAGE2CACHE AND QUERYHITRAN (ver. 1.1.0.8.6)
+# ADDED SUPPORT FOR NON-INTEGER LOCAL ISO IDS (ver. 1.1.0.8.7)
 
 # version header
 print('HAPI version: %s' % HAPI_VERSION)
@@ -1756,7 +1757,7 @@ def storage2cache(TableName,cast=True,ext=None):
                 aux = aux[:aux.index('.')]
             size = int(aux)
             end = start + size
-            def cfunc(line, dtype=dtype, start=start, end=end):
+            def cfunc(line, dtype=dtype, start=start, end=end, qnt=qnt):
                 # return dtype(line[start:end]) # this will fail on the float number with D exponent (Fortran notation)
                 if dtype==float:
                     try:
@@ -1771,6 +1772,12 @@ def storage2cache(TableName,cast=True,ext=None):
                                 return dtype(res.group(1)+'E-'+res.group(2))
                             else:
                                 raise Exception('PARSE ERROR: unknown format of the par value (%s)'%line[start:end])
+                elif dtype==int and qnt=='local_iso_id':
+                    try:
+                        return dtype(line[start:end])
+                    except ValueError:
+                        # convert letters to numbers: A->11, B->12, etc... ; .par file must be in ASCII or Unicode.
+                        return 11+ord(line[start:end])-ord('A')
                 else:
                     return dtype(line[start:end])
             #cfunc.__doc__ = 'converter {} {}'.format(qnt, fmt) # doesn't work in earlier versions of Python
@@ -3445,9 +3452,10 @@ ISO_ID = {
      12 : [       2,   6,  '(16O)(13C)(17O)',           0.00000825,         45.9974,        'CO2'     ],
      13 : [       2,   7,  '(12C)(18O)2',               0.0000039573,       47.998322,      'CO2'     ],
      14 : [       2,   8,  '(17O)(12C)(18O)',           0.00000147,         46.998291,      'CO2'     ],
-     15 : [       2,   0,  '(13C)(18O)2',               0.000000044967,     49.001675,      'CO2'     ],
-    120 : [       2,  11,  '(18O)(13C)(17O)',           0.00000001654,      48.00165,       'CO2'     ],
     121 : [       2,   9,  '(12C)(17O)2',               0.0000001368,       45.998262,      'CO2'     ],
+     15 : [       2,   0,  '(13C)(18O)2',               0.000000044967,     49.001675,      'CO2'     ],  # 0->11
+    120 : [       2,  11,  '(18O)(13C)(17O)',           0.00000001654,      48.00165,       'CO2'     ],  # 'A'->11
+    122 : [       2,  12,  '(13C)(17O)2',               0.0000000015375,    47.001618,      'CO2'     ],  # 'B'->12
      16 : [       3,   1,  '(16O)3',                    0.992901,           47.984745,      'O3'      ],
      17 : [       3,   2,  '(16O)(16O)(18O)',           0.00398194,         49.988991,      'O3'      ],
      18 : [       3,   3,  '(16O)(18O)(16O)',           0.00199097,         49.988991,      'O3'      ],
@@ -3588,9 +3596,10 @@ ISO = {
 (        2,   6    ): [     12,  '(16O)(13C)(17O)',           0.00000825,         45.9974,        'CO2'     ],
 (        2,   7    ): [     13,  '(12C)(18O)2',               0.0000039573,       47.998322,      'CO2'     ],
 (        2,   8    ): [     14,  '(17O)(12C)(18O)',           0.00000147,         46.998291,      'CO2'     ],
-(        2,   0    ): [     15,  '(13C)(18O)2',               0.000000044967,     49.001675,      'CO2'     ],
-(        2,  11    ): [    120,  '(18O)(13C)(17O)',           0.00000001654,      48.00165,       'CO2'     ],
 (        2,   9    ): [    121,  '(12C)(17O)2',               0.0000001368,       45.998262,      'CO2'     ],
+(        2,   0    ): [     15,  '(13C)(18O)2',               0.000000044967,     49.001675,      'CO2'     ],  # 0->10
+(        2,  11    ): [    120,  '(18O)(13C)(17O)',           0.00000001654,      48.00165,       'CO2'     ],  # 'A'->11
+(        2,  12    ): [    122,  '(13C)(17O)2',               0.0000000015375,    47.001618,      'CO2'     ],  # 'B'->12
 (        3,   1    ): [     16,  '(16O)3',                    0.992901,           47.984745,      'O3'      ],
 (        3,   2    ): [     17,  '(16O)(16O)(18O)',           0.00398194,         49.988991,      'O3'      ],
 (        3,   3    ): [     18,  '(16O)(18O)(16O)',           0.00199097,         49.988991,      'O3'      ],
