@@ -17,27 +17,23 @@ as they are present in almost any programming language.
 Trying to retain functional style for this API. 
 '''
 
-#import httplib
-#import urllib2
 import sys
 import json
 import os, os.path
 import re
 from os import listdir
 import numpy as np
-from numpy import zeros,array,zeros,setdiff1d,ndarray,arange
-from numpy import place,where,insert,real,polyval
-from numpy import complex128,complex64,int64,int32,float64,float32
+from numpy import zeros,array,setdiff1d,ndarray,arange
+from numpy import place,where,real,polyval
+from numpy import complex128,int64,float64,float32
 from numpy import sqrt,abs,exp,pi,log,sin,cos,tan
 from numpy import convolve
 from numpy import flipud
 from numpy.fft import fft,fftshift
 from numpy import linspace,floor
 from numpy import any,minimum,maximum
-from numpy import modf
 from numpy import sort as npsort
 from bisect import bisect
-#from collections import OrderedDict
 from warnings import warn,simplefilter
 import pydoc
 
@@ -125,16 +121,6 @@ if VARIABLES['DEBUG']: warn('DEBUG is set to True!')
 GLOBAL_DEBUG = False
 if GLOBAL_DEBUG: warn('GLOBAL_DEBUG is set to True!')
 
-GLOBAL_CURRENT_DIR ='.'
-
-GLOBAL_HITRAN_APIKEY = 'e20e4bd3-e12c-4931-99e0-4c06e88536bd'
-
-GLOBAL_USER = 'user'
-GLOBAL_REQUISITES = []
-
-GLOBAL_CONNECTION = []
-GLOBAL_DATABASE = 'hitran'
-
 LOCAL_HOST = 'http://localhost'
 
 # DEBUG switch
@@ -142,9 +128,6 @@ if GLOBAL_DEBUG:
    GLOBAL_HOST = LOCAL_HOST+':8000' # localhost
 else:
    GLOBAL_HOST = 'http://hitran.org'
-
-# this is a backup URL in the case GLOBAL_HOST does not work
-GLOBAL_HOST_BACKUP = 'http://hitranazure.cloudapp.net/'
 
 # make it changeable
 VARIABLES['GLOBAL_HOST'] = GLOBAL_HOST
@@ -162,287 +145,6 @@ def arange_(lower,upper,step):
         upper_new += step
         npnt += 1    
     return linspace(lower,upper_new,npnt)
-
-
-# interface for checking of variable's existance   
-def empty(Instance):
-    return True if Instance else False
-
-# general interface for getattr
-def getAttribute(Object,Attribute):
-    return getattr(Object,Attribute)
-
-# general interface for setattr
-def setAttribute(Object,Attribute,Value):
-    setattr(Object,Attribute,Value)
-    return
-
-# UNPARSED QUERY OBJECT
-# uses formal language (SQL, noSQL, custom...)
-GlobalQueryString = ''
-
-# PARSED QUERY OBJECT
-# = prototype for a Query instance
-# there should be a getAttrbute/setSettribute functions defined
-# For Django: Query=QuerySet (as  an example)
-Query = {}
-
-# prototype for cache storage
-# there must be function for record/retrieve
-# caching is performed by the value of Query
-# cache parameters: (query+table_name)
-# if there is already table with such query, copy it
-# if there is already tble with such query AND table_name,
-# return it as is => IT MAY DEPEND ON CERTAIN QUERY TYPE!!
-TABLES = {} # hash/dictionary
-
-# ---------- CONNECTION MANAGEMENT-------------
-
-# interface for establishing HTTP connection
-# can return object/structure/handle
-def setupConnection(Host=VARIABLES['GLOBAL_HOST']):
-    Connection = httplib.HTTPConnection(Host)
-    if not empty(Connection):
-       return Connection
-    else:
-       raise Exception('can''t setup connection')
-
-# interface for HTTP-get method
-# Connection must be established before use
-def httpGet(URL,Connection=GLOBAL_CONNECTION):
-    Method = 'get'
-    ServerResponse = Connection.request(Method,URL)
-    return ServerResponse
-
-# parse local data language to remote frontend
-def parseToFrontend(Query,Host=VARIABLES['GLOBAL_HOST']):
-    # convert Query object to server frontend's 
-    # query language
-    pass 
- 
-def prepareURL(Query,Connection=GLOBAL_CONNECTION):
-    # make full URL from server name and it's parameters
-    # considering server's frontend query language
-    Host = getAttribute(Connection,'host')
-    HostQuery = parseToFrontend(Query)
-    URL = Host+HostQuery
-    return URL
-
-# stream raw data from the server
-# the data is assumed to be very large that
-# ordinary get is unefficient
-def streamRawDataRemote(Query,Connection=GLOBAL_CONNECTION):
-    pass
-
-# collect raw data in whatever format server gives it
-def getRawDataRemote(Query,Connection=GLOBAL_CONNECTION):
-    URL = prepareURL(Query,Connection)    
-    ServerResponse=httpGet(URL,Connection)
-    return ServerResponse
-
-## parse raw data 
-#def parseRawData(RawData)
-#    pass
-
-# ---------- CONNECTION MANAGEMEND END --------
-
-# Two types of interaction between API and DB:
-# 1) via API library
-# 2) via REST http protocol (torrent-like)
-
-# ---------- NODE MANAGEMENT ------------------
-
-# An interface for a node manager will follow soon.
-# This is an implementation in Python
-# Different implementations are language-specific.
-
-# Default node with simple DB engine
-# Prototype for a global node list for a given host
-
-# Each node has it's unique ID, host name and 
-#   node name within it's host
-
-NODE_NAME = 'local'
-
-GLOBAL_NODENAMES = {
-   0 : 'hitran-main',
-   1 : 'local'
-}
-
-GLOBAL_NODELIST = {
-   0 : {  # main HITRAN node
-       'host' : VARIABLES['GLOBAL_HOST'],
-       'ACCESS_KEY' : '9b6a7975-2a84-43d8-920e-f4dea9db6805' # guest
-   },
-   1 : {  # local node prototype
-       'host' : LOCAL_HOST,
-       'ACCESS_KEY' : '6cfd7040-24a6-4197-81f9-6e25e50005b2', # admin
-   }
-}
-
-def createNode(NodeID,NodeList=GLOBAL_NODELIST):
-    # create a node, throw if exists
-    node = NodeList.get(NodeID)
-    if node: raise Exception('node %s already exists' % NodeName)
-    NodeList[NodeID] = {}
-    pass
-
-def getNodeIDs(NodeList=GLOBAL_NODELIST):
-    # return list of all available nodes
-    return NodeList.keys()
-
-def getNodeProperty(NodeID,PropName,NodeList=GLOBAL_NODELIST):
-    # get a property for certain node
-    # if not found throw exception
-    node = NodeList.get(NodeName)
-    if node:
-       prop = node.get(PropName)
-       if prop:
-          return prop
-       else:
-          raise Exception('node %s doesn''t have property %s' % (ModeName,Propname) )       
-    else:
-       raise Exception('no such node %s' % Nodename)
-
-def setNodeProperty(NodeID,PropName,PropValue,NodeList=GLOBAL_NODELIST):
-    # set a property for certain node
-    # throw exception if node not found
-    # if the property doesn't exist it will appear
-    node = NodeList.get(NodeID)
-    if not node: raise Exception('no such node %s ' % NodeName)
-    NodeList[PropName] = PropValue
-    return
-
-def resolveNodeID(NodeName,NodeNames=GLOBAL_NODENAMES):
-    for NodeID in NodeNames.keys():
-        if NodeNames[NodeID]==NodeName: return NodeID
-
-def checkAccess(DBName,TableName,NodeName,UserName,Requisites,NodeList=GLOBAL_NODELIST,NodeNames=GLOBAL_NODENAMES):
-    # simple node-level authentication (bridge to AUTH system)
-    NodeID = resolveNodeID(NodeName,NodeNames)
-    Node = NodeList[NodeID]
-    if Requisites.key in Node['keys_allowed']:
-       return True
-    else:
-       return False
-
-# ---------- NODE MANAGEMENT END --------------
-
-# ---------- NODE AUTH SYSTEM -----------------
-
-# AUTH SYSTEM is tightly connected to Node manager.
-
-# Prototype for authentication  system.
-# AUTH is responsible for giving an access privileges to all users.
-# Each users has a key ACCESS_KEY which is stored in
-#  a special database HOST:ACCESS_KEYS on a host.
-# Every node has a separate privileges list connected with
-#  each key. 
-
-# The current auth system is based on secret keys of access
-# Default key is 'admin', it's created seamlessly for a local admin.
-
-GLOBAL_PRIVILEGES = {
-   'admin' : {
-       'ACCESS_KEY' : '6cfd7040-24a6-4197-81f9-6e25e50005b2',
-       'LEVEL' : 'ADMIN'
-   },
-   'guest' : {
-       'ACCESS_KEY' : '9b6a7975-2a84-43d8-920e-f4dea9db6805',
-       'LEVEL' : 'USER'
-   }
-}
-
-def addUser():
-    pass
-
-def deleteUser():
-    pass
-
-def authenticate(UserName,Requisites,Privileges=GLOBAL_PRIVILEGES):
-    # Authentication
-    key_list = [Privileges[User]['ACCESS_KEY'] for User in Privileges.keys]
-    return True if Requisites.AccessKey in key_list else False
-
-def checkPrivileges(Path,UserName=GLOBAL_USER,Requisites=GLOBAL_REQUISITES,
-                    Privileges=GLOBAL_PRIVILEGES,NodeList=GLOBAL_NODELIST,Nodenames=GLOBAL_NODENAMES):
-    # Privileges are checked before executing every query (needs optimization)
-    # Path example: SOME_DB::SOME_TABLE::SOME_NODE
-    if not authenticate(UserName,Requisites,Privileges): return False
-    (DBName,TableName,NodeName)=Path.split('::')
-    # loop on all nodes , use NODE_MANAGER's functions instead of 
-    #   working with GLOBAL_NODELIST directly
-    if not checkAccess(DBName,TableName,NodeName,UserName,Requisites,NodeList,NodeNames):
-       return False
-    return True
-
-# ---------- NODE AUTH SYSTEM END -------------
-
-# ---------- DATABASE FRONTEND ----------------
-
-# Structure:
-#   DB::TABLE::NODE
-#     DB - distributed database
-#     TABLE - table within the current database
-#     NODE - instance of this API with fixed DB backend
-#      !! parameter HOST is deprecated
-
-#     HOST - computer at which the NODE/ENGINE is deployed
-
-# TABLE should be considered as schema-free collection
-#  (e.g. MongoDB-type)
-
-### Two databases (DB) - GLOBAL (one) and LOCAL (many)
-
-# Every DB has an ACCESS_KEY providing an access to it
-# User can create a database and it will contain
-#  a list of ACCESS_KEY's for authentication. 
-
-### GLOBAL AND LOCAL are distributed databases.
-### A user can create his GLOBAL database and open an access to it.
-### GLOBAL access implementation: 
-
-### GLOBAL is a distributed database
-
-# The DB front end contains interfaces to 
-#  the standard procedures of data creation and
-#  retrieval of an "average" DBMS.
-#   ("collection" = table)
-#
-#   Levels of access: (DB permissions implementation)
-#   0:USER     read-only operations ("select")
-#   1:MANAGER  manage single DB (create/delete docs)
-#   2:ADMIN    manage multiple DB's (create/delete DB)
-#
-#   Every ACCESS_KEY has it's own access level.
-#
-#   Commands to implement:
-#
-#   ) create DATABASE
-#   ) create ACCESS_KEY 
-#      (seamlessly for the local user)
-#   ) select from LOCAL/GLOBAL doc (cached!)
-#   ) access database
-#      (seamlessly for the local user)
-#   ) create/delete doc
-#   ) copy/clone LOCAL doc
-#   ) "create collection as select * from HOST:ENGINE:DB:COLLECTION"
-#      (other types of table creations are forbidden)
-
-# DB frontend is adapted to denormalized 
-#  schema-fixed tables or schema-independent documents. 
-
-# DB front end is connected to multiple backends
-#  which are largely language-specific.
-
-### ATTENTION: since the system is distributed,
-###  the table/document caching is supposed to
-###  be in the front end.
-### Current higher-level implementation
-###  implies the query-based caching, i.e. 
-###  cache lookup is performed by the value 
-###  of Query structure/object.
-
 
 # ---------------------------------------------------------------
 # ---------------------------------------------------------------
@@ -1449,19 +1151,8 @@ def getFullTableAndHeaderName(TableName,ext=None):
 def getParameterFormat(ParameterName,TableName):
     return LOCAL_TABLE_CACHE[TableName]['header']['format']
 
-
 def getTableHeader(TableName):
     return LOCAL_TABLE_CACHE[TableName]['header']
-
-# RowObject = list of tuples like (name,value,format)
-def addRowObject(RowObject,TableName):
-    # add RowObject to TableObject in CACHE
-    # check consistency first
-    if [p[0] for p in RowObject] != LOCAL_TABLE_CACHE[TableName]['header']['order']:
-       raise Exception('The row is not consistent with the table')
-    for par_name,par_value,par_format in RowObject:
-        LOCAL_TABLE_CACHE[TableName]['data'][par_name] += par_value
-    pass
 
 def getRowObject(RowID,TableName):
     # return RowObject from TableObject in CACHE
@@ -1547,9 +1238,6 @@ def formatString(par_format,par_value,lang='FORTRAN'):
              result = '%%%ds' % lng % (res[0:1]+res[2:])
     return result
 
-def formatGetLength(fmt,lang='FORTRAN'):
-    regex = FORMAT_PYTHON_REGEX
-   
 def putRowObjectToString(RowObject):
     # serialize RowObject to string
     # TODO: support different languages (C,Fortran)
@@ -1673,7 +1361,7 @@ def cache2storage(TableName):
     # write table data
     line_count = 1
     line_number = LOCAL_TABLE_CACHE[TableName]['header']['number_of_rows']
-    for RowID in range(0,LOCAL_TABLE_CACHE[TableName]['header']['number_of_rows']):
+    for RowID in range(0,line_number):
         line_count += 1
         RowObject = getRowObject(RowID,TableName)
         raw_string = putRowObjectToString(RowObject)
@@ -1683,7 +1371,7 @@ def cache2storage(TableName):
     OutfileHeader.write(json.dumps(TableHeader,indent=2))
     
 def storage2cache(TableName,cast=True,ext=None):
-    """read speedup by Loeber"""
+    """NHL"""
     #print 'storage2cache:'
     #print('TableName',TableName)
     fullpath_data,fullpath_header = getFullTableAndHeaderName(TableName,ext)
@@ -1914,7 +1602,7 @@ def createHeader(TableName):
 
 def loadCache():
     print('Using '+VARIABLES['BACKEND_DATABASE_NAME']+'\n')
-    LOCAL_TABLE_CACHE = {} # ?????
+    LOCAL_TABLE_CACHE = {}
     table_names = getTableNamesFromStorage(VARIABLES['BACKEND_DATABASE_NAME'])
     parfiles_without_header = scanForNewParfiles(VARIABLES['BACKEND_DATABASE_NAME'])
     # create headers for new parfiles
@@ -2152,6 +1840,7 @@ def getValueFromGroupIndex(GroupIndexKey,FunctionName):
 def setValueToGroupIndex(GroupIndexKey,FunctionName,Value):
     GROUP_INDEX[GroupIndexKey]['FUNCTIONS'][FunctionName]['VALUE'] = Value
 
+GROUP_DESC = {}
 def initializeGroup(GroupIndexKey):
     if GroupIndexKey not in GROUP_INDEX:
         print('GROUP_DESC[COUNT]='+str(GROUP_DESC['COUNT']))
@@ -2260,7 +1949,7 @@ OPERATORS = {\
 # Regexp findal
 'FINDALL' : lambda args : operationFINDALL(args[0],args[1]),
 # Group count
-'COUNT' : lambda args : groupCOUNT(GroupIndexKey),
+'COUNT' : lambda args : groupCOUNT(args[0]),
 }
     
 # new evaluateExpression function,
@@ -2808,7 +2497,7 @@ def arrangeTable(TableName,DestinationTableName=None,RowIDList=None):
     #print 'AT: RowIDList = '+str(RowIDList)
     # make a subset of table rows according to RowIDList
     if not DestinationTableName:
-       DestinationTablename = TableName
+       DestinationTableName = TableName
     if DestinationTableName != TableName:
        dropTable(DestinationTableName)
        LOCAL_TABLE_CACHE[DestinationTableName]['header']=LOCAL_TABLE_CACHE[TableName]['header']
@@ -2925,7 +2614,7 @@ def sort(TableName,DestinationTableName=None,ParameterNames=None,Accending=True,
 #    than the following key is used: "__GLOBAL__"
 
 
-def group(TableName,DestinationTableName=QUERY_BUFFER,ParameterNames=None,GroupParameterNames=None,Output=True):
+def group(TableName,DestinationTableName=QUERY_BUFFER,ParameterNames=None,GroupParameterNames=None,File=None,Output=True):
     """
     INPUT PARAMETERS: 
         TableName:                name of source table          (required)
@@ -3368,39 +3057,6 @@ def saveHeader(TableName):
     with open(TableName+'.header','w') as fp:
        fp.write(json.dumps(TableHeader,indent=2))
     
-# NODE CODE 
-NODE_READY = False
-
-# Node initialization
-def nodeInit(): 
-    # very unoptimal, since it loads all tables in memory!!
-    databaseBegin() # DB backend level, start transaction
-    NODE_READY = True
-
-# returns a table instance created from Query object
-def globalSelectInto(NewTablePath,SourceTablePath,ParameterNames,Conditions):
-    # creates table from parsed data
-    # and store it in the database DB
-    
-    dbname,tablename,nodename = NewTablePath.split('::')
-    dbname1,tablename1,nodename1 = SourceTablePath.split('::')
-
-    if not NODE_READY: raise Exception('Node \"%s\" is not ready. Call nodeInit()' % NODE_NAME)
-
-    # should get rid of selectLocal as planning to use network interface
-    # ......    selectLocal OR selectRemote
-
-    pass
-
-# ---------------------------------------------------------------
-
-# query_string - query written in the 
-# formal language of local database frontend
-def makeQuery(query_string,Connection=GLOBAL_CONNECTION):
-    # makes a query to remote server
-    # using connection instance
-    pass
-
 # ---------- DATABASE FRONTEND END -------------
 
 # simple implementation of getting a line list from a remote server
@@ -18500,7 +18156,6 @@ def getDefaultValuesForXsect(Components,SourceTables,Environment,OmegaRange,
             if omega_max < numax:
                 omega_max = numax
         OmegaRange = (omega_min,omega_max)
-    OmegaDelta = OmegaRange[1]-OmegaRange[0]
     if OmegaStep == None:
         OmegaStep = 0.01 # cm-1
     if OmegaWing == None:
