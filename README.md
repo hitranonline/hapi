@@ -20,7 +20,7 @@ Some of the prominent current features of HAPI are:
     3) Conventional Python structures (lists, tuples, and dictionaries) for representing spectroscopic data;
     4) Compatibility with a large set of third-party Python libraries to work with the data;
     5) Python implementation of the HT profile [2,3,4,5] which can be used in spectral simulations. This line shape can also be reduced to a number of conventional line profiles such as Gaussian (Doppler), Lorentzian, Voigt, Rautian, Speed-dependent Voigt and speed-dependent Rautian;
-    6) Python implementation of the total internal partition sums algorithm, TIPS-2011 [6] which is used in the calculation of the temperature dependence of HITRAN [7] transition intensities;
+    6) Python implementation of the total internal partition sums algorithm, TIPS-2017[6] which is used in the calculation of the temperature dependence of HITRAN[7] transition intensities. The older software TIPS-2011[8] is also available;
     7) High-resolution spectral simulation accounting for pressure, temperature and optical path length. The following spectral functions can be calculated:
         a) absorption coefficient
         b) absorption spectrum
@@ -49,6 +49,8 @@ To make a reference to particular version of HAPI, use corresponding DOI from th
 
 [5] J. Tennyson, P. F. Bernath, A. Campargue et al., Recommended isolated-line profile for representing high-resolution spectroscopic transitions (IUPAC Technical Report), Pure Appl. Chem. 86, 1931-1943 (2014) [Link to article](http://www.degruyter.com/view/j/pac.2014.86.issue-12/pac-2014-0208/pac-2014-0208.xml)
 
-[6] A. L. Laraia, R. R. Gamache, J. Lamouroux, I. E. Gordon, L. S. Rothman, Total internal partition sums to support planetary remote sensing, Icarus 215, 391-400 (2011). [Link to article](http://www.sciencedirect.com/science/article/pii/S0019103511002132)
+[6] R. R. Gamache, C. Roller, E. Lopes, I. E. Gordon, L. S. Rothman, et al., Total internal partition sums for 166 isotopologues of 51 molecules important in planetary atmospheres: Application to HITRAN2016 and beyond, J. Quant. Spectrosc. Radiat. Transfer 203, 70â€“87 (2017). [Link to article](https://www.sciencedirect.com/science/article/pii/S0022407317301516)
 
-[7] I. E Gordon, et al. The HITRAN2016 molecular spectroscopic database. J. Quant. Spectrosc. Radiat. Transf. 130, 4–50 (2017). [link to article](https://linkinghub.elsevier.com/retrieve/pii/S0022407317301073)
+[7] I. E. Gordon, L. S. Rothman, C. Hill, R. V. Kochanov, Y. Tan, et al., The HITRAN2016 molecular spectroscopic database, J. Quant. Spectrosc. Radiat. Transfer 203, 3-69 (2017). [link to article](https://www.sciencedirect.com/science/article/pii/S0022407317301073)
+
+[8] A. L. Laraia, R. R. Gamache, J. Lamouroux, I. E. Gordon, L. S. Rothman, Total internal partition sums to support planetary remote sensing, Icarus 215, 391-400 (2011). [Link to article](http://www.sciencedirect.com/science/article/pii/S0019103511002132)
