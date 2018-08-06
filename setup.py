@@ -16,6 +16,10 @@ with open('README.md') as f:
     
 main_body = re.search('(## Introduction.+)$',README,re.MULTILINE|re.DOTALL).groups(0)[0].rstrip()
     
+HISTORY_LIST = ''
+for i,item in enumerate(HAPI_HISTORY):
+    HISTORY_LIST += '  %d) %s\n'%(i+1,item)
+    
 README = """
 # HITRAN Application Programming Interface (HAPI)
 ===============================================
@@ -28,7 +32,7 @@ Current version: {hapi_version}
 
 {body}
 
-""".format(hapi_version=HAPI_VERSION,body=main_body,history=HAPI_HISTORY.strip())
+""".format(hapi_version=HAPI_VERSION,body=main_body,history=HISTORY_LIST.rstrip())
 
 # Python 2 and 3 encoding support
 if sys.version_info[0]<3:

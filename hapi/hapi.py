@@ -53,31 +53,32 @@ if 'io' in sys.modules: # define open using Linux-style line endings
 else:
     open_ = open
 
-HAPI_VERSION = '1.1.0.8.7'; __version__ = HAPI_VERSION
-HAPI_HISTORY = """
-FIXED GRID BUG (ver. 1.1.0.1)
-FIXED OUTPUT FORMAT FOR CROSS-SECTIONS (ver. 1.1.0.1)
-ADDED CPF BY SCHREIER (JQSRT_112_2011) (ver. 1.1.0.2)
-OPTIMIZED EXPRESSION EVALUATIONS FOR SELECT (ver. 1.1.0.3)
-ADDED SUPPORT FOR MIXTURES (ver. 1.1.0.4)
-ADDED SUPPORT FOR USER-DEFINED ENV DEPENDENCES (ver. 1.1.0.5)
-ADDED PROFILE SELECTION (ALPHA) (ver. 1.1.0.6)
-ADDED METADATA FOR HTP, FIXED NORMALIZATION IN CONVOLVESPECTRUMSAME (ver. 1.1.0.7)
-FIXED A "LONELY HEADER" BUG IN CACHE2STORAGE (ver. 1.1.0.7.1)
-ADDED SUPPORT FOR PHOSGENE AND CYANOGEN (ver. 1.1.0.7.2)
-OPTIMIZED STORAGE2CACHE (by Nils-Holger Löber) (ver. 1.1.0.7.3)
-ADDED SKIPABLE PARAMETERS IN HEADERS (ver. 1.1.0.7.4)
-ADDED SUPPORT FOR FORTRAN D-NOTATION (ver. 1.1.0.7.5)
-ADDED SUPPORT FOR WEIRD-FORMATTED INTENSITY VALUES E.G. "2.700-164" (ver. 1.1.0.7.6)
-ADDED TIPS-2017 (ver. 1.1.0.8)
-ADDED SUPPORT FOR CUSTOM EXTENSIONS OF THE DATA FILES (ver. 1.1.0.8.1)
-FIXED LINK TO (2,0) ISOTOPOLOGUE IN TIPS-2017 (ver. 1.1.0.8.2)
-ADDED SAVEHEADER FUNCTION (ver. 1.1.0.8.3)
-ADDED METADATA FOR SF6 (ver. 1.1.0.8.4)
-ADDED D2O ISOTOPOLOGUE OF WATER TO DESCRIPTION (ver. 1.1.0.8.5)
-FIXED LINE ENDINGS IN STORAGE2CACHE AND QUERYHITRAN (ver. 1.1.0.8.6)
-ADDED SUPPORT FOR NON-INTEGER LOCAL ISO IDS (ver. 1.1.0.8.7)
-"""
+HAPI_VERSION = '1.1.0.8.8'; __version__ = HAPI_VERSION
+HAPI_HISTORY = [
+'FIXED GRID BUG (ver. 1.1.0.1)',
+'FIXED OUTPUT FORMAT FOR CROSS-SECTIONS (ver. 1.1.0.1)',
+'ADDED CPF BY SCHREIER (JQSRT_112_2011) (ver. 1.1.0.2)',
+'OPTIMIZED EXPRESSION EVALUATIONS FOR SELECT (ver. 1.1.0.3)',
+'ADDED SUPPORT FOR MIXTURES (ver. 1.1.0.4)',
+'ADDED SUPPORT FOR USER-DEFINED ENV DEPENDENCES (ver. 1.1.0.5)',
+'ADDED PROFILE SELECTION (ALPHA) (ver. 1.1.0.6)',
+'ADDED METADATA FOR HTP, FIXED NORMALIZATION IN CONVOLVESPECTRUMSAME (ver. 1.1.0.7)',
+'FIXED A "LONELY HEADER" BUG IN CACHE2STORAGE (ver. 1.1.0.7.1)',
+'ADDED SUPPORT FOR PHOSGENE AND CYANOGEN (ver. 1.1.0.7.2)',
+'OPTIMIZED STORAGE2CACHE (by Nils-Holger Loeber) (ver. 1.1.0.7.3)',
+'ADDED SKIPABLE PARAMETERS IN HEADERS (ver. 1.1.0.7.4)',
+'ADDED SUPPORT FOR FORTRAN D-NOTATION (ver. 1.1.0.7.5)',
+'ADDED SUPPORT FOR WEIRD-FORMATTED INTENSITY VALUES E.G. "2.700-164" (ver. 1.1.0.7.6)',
+'ADDED TIPS-2017 (ver. 1.1.0.8)',
+'ADDED SUPPORT FOR CUSTOM EXTENSIONS OF THE DATA FILES (ver. 1.1.0.8.1)',
+'FIXED LINK TO (2,0) ISOTOPOLOGUE IN TIPS-2017 (ver. 1.1.0.8.2)',
+'ADDED SAVEHEADER FUNCTION (ver. 1.1.0.8.3)',
+'ADDED METADATA FOR SF6 (ver. 1.1.0.8.4)',
+'ADDED D2O ISOTOPOLOGUE OF WATER TO DESCRIPTION (ver. 1.1.0.8.5)',
+'FIXED LINE ENDINGS IN STORAGE2CACHE AND QUERYHITRAN (ver. 1.1.0.8.6)',
+'ADDED SUPPORT FOR NON-INTEGER LOCAL ISO IDS (ver. 1.1.0.8.7)',
+'FIXED PARAMETER NAME CASE BUG (by Robert J. Hargreaves) (ver. 1.1.0.8.8)',
+]
 
 # version header
 print('HAPI version: %s' % HAPI_VERSION)
@@ -18334,9 +18335,10 @@ def absorptionCoefficient_HT(Components=None,SourceTables=None,partitionFunction
     if VARIABLES['DEBUG']: print('absorptionCoefficient_HT: Diluent=%s'%Diluent)
         
     # Simple check
+    print(Diluent)  # Added print statement # CHANGED RJH 23MAR18  # Simple check
     for key in Diluent:
         val = Diluent[key]
-        if val < 0 and val > 1:
+        if val < 0 or val > 1: # if val < 0 and val > 1:# CHANGED RJH 23MAR18
             raise Exception('Diluent fraction must be in [0,1]')
     
     # SourceTables contain multiple tables
@@ -18391,7 +18393,7 @@ def absorptionCoefficient_HT(Components=None,SourceTables=None,partitionFunction
             #   pressure broadening coefficient
             Gamma0 = 0.; Shift0 = 0.; Gamma2 = 0.; Shift2 = 0.; NuVC = 0.; EtaNumer = 0.;
             for species in Diluent:
-                species_lower = species.lower()
+                species_lower = species # species_lower = species.lower() # CHANGED RJH 23MAR18
                 
                 abun = Diluent[species]
                 
@@ -18679,9 +18681,10 @@ def absorptionCoefficient_SDVoigt(Components=None,SourceTables=None,partitionFun
             raise Exception('Unknown GammaL value: %s' % GammaL)
         
     # Simple check
+    print(Diluent)  # Added print statement # CHANGED RJH 23MAR18  # Simple check
     for key in Diluent:
         val = Diluent[key]
-        if val < 0 and val > 1:
+        if val < 0 or val > 1: # if val < 0 and val > 1:# CHANGED RJH 23MAR18
             raise Exception('Diluent fraction must be in [0,1]')
     
     # SourceTables contain multiple tables
@@ -18736,7 +18739,7 @@ def absorptionCoefficient_SDVoigt(Components=None,SourceTables=None,partitionFun
             #   pressure broadening coefficient
             Gamma0 = 0.; Shift0 = 0.; Gamma2 = 0.; Shift2 = 0.
             for species in Diluent:
-                species_lower = species.lower()
+                species_lower = species # species_lower = species.lower() # CHANGED RJH 23MAR18
                 
                 abun = Diluent[species]
                 
@@ -18926,9 +18929,10 @@ def absorptionCoefficient_Voigt(Components=None,SourceTables=None,partitionFunct
             raise Exception('Unknown GammaL value: %s' % GammaL)
         
     # Simple check
+    print(Diluent)  # Added print statement # CHANGED RJH 23MAR18  # Simple check
     for key in Diluent:
         val = Diluent[key]
-        if val < 0 and val > 1:
+        if val < 0 or val > 1: # if val < 0 and val > 1:# CHANGED RJH 23MAR18
             raise Exception('Diluent fraction must be in [0,1]')
     
     # SourceTables contain multiple tables
@@ -18983,7 +18987,7 @@ def absorptionCoefficient_Voigt(Components=None,SourceTables=None,partitionFunct
             #   pressure broadening coefficient
             Gamma0 = 0.; Shift0 = 0.;
             for species in Diluent:
-                species_lower = species.lower()
+                species_lower = species # species_lower = species.lower() # CHANGED RJH 23MAR18
                 
                 abun = Diluent[species]
                 
@@ -19164,9 +19168,10 @@ def absorptionCoefficient_Lorentz(Components=None,SourceTables=None,partitionFun
             raise Exception('Unknown GammaL value: %s' % GammaL)
         
     # Simple check
+    print(Diluent)  # Added print statement # CHANGED RJH 23MAR18  # Simple check
     for key in Diluent:
         val = Diluent[key]
-        if val < 0 and val > 1:
+        if val < 0 or val > 1: # if val < 0 and val > 1:# CHANGED RJH 23MAR18
             raise Exception('Diluent fraction must be in [0,1]')
     
     # SourceTables contain multiple tables
@@ -19216,7 +19221,7 @@ def absorptionCoefficient_Lorentz(Components=None,SourceTables=None,partitionFun
             #   pressure broadening coefficient
             Gamma0 = 0.; Shift0 = 0.;
             for species in Diluent:
-                species_lower = species.lower()
+                species_lower = species # species_lower = species.lower() # CHANGED RJH 23MAR18
                 
                 abun = Diluent[species]
                 
