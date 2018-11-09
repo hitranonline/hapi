@@ -53,7 +53,7 @@ if 'io' in sys.modules: # define open using Linux-style line endings
 else:
     open_ = open
 
-HAPI_VERSION = '1.1.0.8.8'; __version__ = HAPI_VERSION
+HAPI_VERSION = '1.1.0.9.0'; __version__ = HAPI_VERSION
 HAPI_HISTORY = [
 'FIXED GRID BUG (ver. 1.1.0.1)',
 'FIXED OUTPUT FORMAT FOR CROSS-SECTIONS (ver. 1.1.0.1)',
@@ -79,6 +79,7 @@ HAPI_HISTORY = [
 'ADDED SUPPORT FOR NON-INTEGER LOCAL ISO IDS (ver. 1.1.0.8.7)',
 'FIXED PARAMETER NAME CASE BUG (by Robert J. Hargreaves) (ver. 1.1.0.8.8)',
 'CAST LOCAL_ISO_ID=0 TO 10 FOR CARBON DIOXIDE (ver. 1.1.0.8.9)',
+'USING NUMPY.ARRAYS FOR NUMERIC COLUMNS OF LOCAL_TABLE_CACHE (ver. 1.1.0.9.0)',
 ]
 
 # version header
@@ -1477,7 +1478,11 @@ def storage2cache(TableName,cast=True,ext=None):
         data_matrix = [[cvt(line) for cvt in converters] for line in InfileData]
         data_columns = zip(*data_matrix)
         for qnt, col in zip(quantities, data_columns):
-            LOCAL_TABLE_CACHE[TableName]['data'][qnt].extend(col)               
+            #LOCAL_TABLE_CACHE[TableName]['data'][qnt].extend(col) # old code
+            if type(col[0]) in {np.int32,np.float64}:
+                LOCAL_TABLE_CACHE[TableName]['data'][qnt] = np.array(col) # new code
+            else:
+                LOCAL_TABLE_CACHE[TableName]['data'][qnt].extend(col) # old code
             #LOCAL_TABLE_CACHE[TableName]['data'][qnt] = list(col)
             #LOCAL_TABLE_CACHE[TableName]['data'][qnt] = col
         header['number_of_rows'] = line_count = (
