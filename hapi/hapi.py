@@ -78,6 +78,7 @@ HAPI_HISTORY = [
 'FIXED LINE ENDINGS IN STORAGE2CACHE AND QUERYHITRAN (ver. 1.1.0.8.6)',
 'ADDED SUPPORT FOR NON-INTEGER LOCAL ISO IDS (ver. 1.1.0.8.7)',
 'FIXED PARAMETER NAME CASE BUG (by Robert J. Hargreaves) (ver. 1.1.0.8.8)',
+'CAST LOCAL_ISO_ID=0 TO 10 FOR CARBON DIOXIDE (ver. 1.1.0.8.9)',
 ]
 
 # version header
@@ -1462,6 +1463,7 @@ def storage2cache(TableName,cast=True,ext=None):
                             else:
                                 raise Exception('PARSE ERROR: unknown format of the par value (%s)'%line[start:end])
                 elif dtype==int and qnt=='local_iso_id':
+                    if line[start:end]=='0': return 10
                     try:
                         return dtype(line[start:end])
                     except ValueError:
@@ -3110,7 +3112,7 @@ ISO_ID = {
      13 : [       2,   7,  '(12C)(18O)2',               0.0000039573,       47.998322,      'CO2'     ],
      14 : [       2,   8,  '(17O)(12C)(18O)',           0.00000147,         46.998291,      'CO2'     ],
     121 : [       2,   9,  '(12C)(17O)2',               0.0000001368,       45.998262,      'CO2'     ],
-     15 : [       2,   0,  '(13C)(18O)2',               0.000000044967,     49.001675,      'CO2'     ],  # 0->11
+     15 : [       2,  10,  '(13C)(18O)2',               0.000000044967,     49.001675,      'CO2'     ],  # 0->11
     120 : [       2,  11,  '(18O)(13C)(17O)',           0.00000001654,      48.00165,       'CO2'     ],  # 'A'->11
     122 : [       2,  12,  '(13C)(17O)2',               0.0000000015375,    47.001618,      'CO2'     ],  # 'B'->12
      16 : [       3,   1,  '(16O)3',                    0.992901,           47.984745,      'O3'      ],
@@ -3254,7 +3256,7 @@ ISO = {
 (        2,   7    ): [     13,  '(12C)(18O)2',               0.0000039573,       47.998322,      'CO2'     ],
 (        2,   8    ): [     14,  '(17O)(12C)(18O)',           0.00000147,         46.998291,      'CO2'     ],
 (        2,   9    ): [    121,  '(12C)(17O)2',               0.0000001368,       45.998262,      'CO2'     ],
-(        2,   0    ): [     15,  '(13C)(18O)2',               0.000000044967,     49.001675,      'CO2'     ],  # 0->10
+(        2,  10    ): [     15,  '(13C)(18O)2',               0.000000044967,     49.001675,      'CO2'     ],  # 0->10
 (        2,  11    ): [    120,  '(18O)(13C)(17O)',           0.00000001654,      48.00165,       'CO2'     ],  # 'A'->11
 (        2,  12    ): [    122,  '(13C)(17O)2',               0.0000000015375,    47.001618,      'CO2'     ],  # 'B'->12
 (        3,   1    ): [     16,  '(16O)3',                    0.992901,           47.984745,      'O3'      ],
