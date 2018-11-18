@@ -53,7 +53,7 @@ if 'io' in sys.modules: # define open using Linux-style line endings
 else:
     open_ = open
 
-HAPI_VERSION = '1.1.0.9.0'; __version__ = HAPI_VERSION
+HAPI_VERSION = '1.1.0.9.1'; __version__ = HAPI_VERSION
 HAPI_HISTORY = [
 'FIXED GRID BUG (ver. 1.1.0.1)',
 'FIXED OUTPUT FORMAT FOR CROSS-SECTIONS (ver. 1.1.0.1)',
@@ -80,6 +80,7 @@ HAPI_HISTORY = [
 'FIXED PARAMETER NAME CASE BUG (by Robert J. Hargreaves) (ver. 1.1.0.8.8)',
 'CAST LOCAL_ISO_ID=0 TO 10 FOR CARBON DIOXIDE (ver. 1.1.0.8.9)',
 'USING NUMPY.ARRAYS FOR NUMERIC COLUMNS OF LOCAL_TABLE_CACHE (ver. 1.1.0.9.0)',
+'ADDED H2O BROADENING PARAMETERS (ver. 1.1.0.9.1)',
 ]
 
 # version header
@@ -1132,6 +1133,12 @@ PARAMETER_META = \
   "eta_HT_air" : {
     "default_fmt" : "%9.6f",
   },  
+  "gamma_H2O" : {
+    "default_fmt" : "%6.4f",
+  },
+  "n_H2O" : {
+    "default_fmt" : "%9.6f",
+  },
 }
 
 def transport2object(TransportData):
@@ -1479,7 +1486,7 @@ def storage2cache(TableName,cast=True,ext=None):
         data_columns = zip(*data_matrix)
         for qnt, col in zip(quantities, data_columns):
             #LOCAL_TABLE_CACHE[TableName]['data'][qnt].extend(col) # old code
-            if type(col[0]) in {np.int32,np.float64}:
+            if type(col[0]) in {int,float}:
                 LOCAL_TABLE_CACHE[TableName]['data'][qnt] = np.array(col) # new code
             else:
                 LOCAL_TABLE_CACHE[TableName]['data'][qnt].extend(col) # old code
@@ -2873,6 +2880,7 @@ PARLIST_VOIGT_SELF = ['gamma_self','delta_self','deltap_self','n_self']
 PARLIST_VOIGT_H2 = ['gamma_H2','delta_H2','deltap_H2','n_H2']
 PARLIST_VOIGT_CO2 = ['gamma_CO2','delta_CO2','n_CO2']
 PARLIST_VOIGT_HE = ['gamma_He','delta_He','n_He']
+PARLIST_VOIGT_H2O = ['gamma_H2O','n_H2O']
 PARLIST_VOIGT_ALL = mergeParlist(PARLIST_VOIGT_AIR,PARLIST_VOIGT_SELF,
                                  PARLIST_VOIGT_H2,PARLIST_VOIGT_CO2,
                                  PARLIST_VOIGT_HE)
@@ -2973,7 +2981,7 @@ def prepareParlist(pargroups=[],params=[],dotpar=True):
         
     # Iterate over single parameters.
     for param in params:
-        param = param.lower()
+        #param = param.lower()
         parlist.append(param)
         
     # Clean up parameter list.
@@ -17794,7 +17802,7 @@ def pcqsdhc(sg0,GamD,Gam0,Gam2,Shift0,Shift2,anuVC,eta,sg):
     #
     #-------------------------------------------------
     
-    # sg is the only vector argument which is passed to fusnction
+    # sg is the only vector argument which is passed to function
     
     if type(sg) not in set([array,ndarray,list,tuple]):
         sg = array([sg])

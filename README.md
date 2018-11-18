@@ -1,7 +1,7 @@
 # HITRAN Application Programming Interface (HAPI)
 ===============================================
 
-Current version: 1.1.0.9.0
+Current version: 1.1.0.9.1
 
 ## Version history
 
@@ -30,6 +30,7 @@ Current version: 1.1.0.9.0
   23) FIXED PARAMETER NAME CASE BUG (by Robert J. Hargreaves) (ver. 1.1.0.8.8)
   24) CAST LOCAL_ISO_ID=0 TO 10 FOR CARBON DIOXIDE (ver. 1.1.0.8.9)
   25) USING NUMPY.ARRAYS FOR NUMERIC COLUMNS OF LOCAL_TABLE_CACHE (ver. 1.1.0.9.0)
+  26) ADDED H2O BROADENINGs (ver. 1.1.0.9.1)
 
 ## Introduction
 
