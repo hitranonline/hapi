@@ -53,7 +53,7 @@ if 'io' in sys.modules: # define open using Linux-style line endings
 else:
     open_ = open
 
-HAPI_VERSION = '1.1.0.9.1'; __version__ = HAPI_VERSION
+HAPI_VERSION = '1.1.0.9.2'; __version__ = HAPI_VERSION
 HAPI_HISTORY = [
 'FIXED GRID BUG (ver. 1.1.0.1)',
 'FIXED OUTPUT FORMAT FOR CROSS-SECTIONS (ver. 1.1.0.1)',
@@ -81,6 +81,7 @@ HAPI_HISTORY = [
 'CAST LOCAL_ISO_ID=0 TO 10 FOR CARBON DIOXIDE (ver. 1.1.0.8.9)',
 'USING NUMPY.ARRAYS FOR NUMERIC COLUMNS OF LOCAL_TABLE_CACHE (ver. 1.1.0.9.0)',
 'ADDED DESCRIPTIONS FOR BROADENING BY H2O (ver. 1.1.0.9.1)',
+'ADDED PROXY SUPPORT IN FETCH AND FETCH_BY_IDS (ver. 1.1.0.9.2)',
 ]
 
 # version header
@@ -133,6 +134,10 @@ if GLOBAL_DEBUG:
 else:
    GLOBAL_HOST = 'http://hitran.org'
 
+VARIABLES['PROXY'] = {}
+# EXAMPLE OF PROXY:
+# VARIABLES['PROXY'] = {'http': '127.0.0.1:80'}
+   
 # make it changeable
 VARIABLES['GLOBAL_HOST'] = GLOBAL_HOST
 
@@ -2883,7 +2888,7 @@ PARLIST_VOIGT_HE = ['gamma_He','delta_He','n_He']
 PARLIST_VOIGT_H2O = ['gamma_H2O','n_H2O']
 PARLIST_VOIGT_ALL = mergeParlist(PARLIST_VOIGT_AIR,PARLIST_VOIGT_SELF,
                                  PARLIST_VOIGT_H2,PARLIST_VOIGT_CO2,
-                                 PARLIST_VOIGT_HE)
+                                 PARLIST_VOIGT_HE,PARLIST_VOIGT_H2O)
 
 PARLIST_SDVOIGT_AIR = ['gamma_air','delta_air','deltap_air','n_air','SD_air']
 PARLIST_SDVOIGT_SELF = ['gamma_self','delta_self','deltap_self','n_self','SD_self']
@@ -2943,6 +2948,7 @@ PARAMETER_GROUPS = {
   'voigt_h2' : PARLIST_VOIGT_H2,
   'voigt_co2' : PARLIST_VOIGT_CO2,
   'voigt_he' : PARLIST_VOIGT_HE,
+  'voigt_h2o' : PARLIST_VOIGT_H2O,
   'voigt' : PARLIST_VOIGT_ALL,
   'sdvoigt_air' : PARLIST_SDVOIGT_AIR,
   'sdvoigt_self' : PARLIST_SDVOIGT_SELF,
@@ -3044,7 +3050,13 @@ def queryHITRAN(TableName,iso_id_list,numin,numax,pargroups=[],params=[],dotpar=
     #raise Exception(url)
     # Download data by chunks.
     if VARIABLES['DISPLAY_FETCH_URL']: print(url+'\n')
-    try:
+    try:       
+        # Proxy handling # https://stackoverflow.com/questions/1450132/proxy-with-urllib2
+        if VARIABLES['PROXY']:
+            print('Using proxy '+str(VARIABLES['PROXY']))
+            proxy = urllib2.ProxyHandler(VARIABLES['PROXY'])
+            opener = urllib2.build_opener(proxy)
+            urllib2.install_opener(opener)            
         req = urllib2.urlopen(url)
     except urllib2.HTTPError:
         raise Exception('Failed to retrieve data for given parameters.')
