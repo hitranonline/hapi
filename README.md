@@ -1,7 +1,7 @@
 # HITRAN Application Programming Interface (HAPI)
 ===============================================
 
-Current version: 1.1.0.9.2
+Current version: 1.1.0.9.4
 
 ## Version history
 
@@ -32,6 +32,8 @@ Current version: 1.1.0.9.2
   25) USING NUMPY.ARRAYS FOR NUMERIC COLUMNS OF LOCAL_TABLE_CACHE (ver. 1.1.0.9.0)
   26) ADDED DESCRIPTIONS FOR BROADENING BY H2O (ver. 1.1.0.9.1)
   27) ADDED PROXY SUPPORT IN FETCH AND FETCH_BY_IDS (ver. 1.1.0.9.2)
+  28) ADDED LIMIT FOR NUMBER OF LINES DURING TABLE READ (ver. 1.1.0.9.3)
+  29) FIXED ABSOLUTE PATH BUG IN TABLE NAMES (ver. 1.1.0.9.4)
 
 ## Introduction
 

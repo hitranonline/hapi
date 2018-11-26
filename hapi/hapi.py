@@ -53,7 +53,7 @@ if 'io' in sys.modules: # define open using Linux-style line endings
 else:
     open_ = open
 
-HAPI_VERSION = '1.1.0.9.2'; __version__ = HAPI_VERSION
+HAPI_VERSION = '1.1.0.9.4'; __version__ = HAPI_VERSION
 HAPI_HISTORY = [
 'FIXED GRID BUG (ver. 1.1.0.1)',
 'FIXED OUTPUT FORMAT FOR CROSS-SECTIONS (ver. 1.1.0.1)',
@@ -82,6 +82,8 @@ HAPI_HISTORY = [
 'USING NUMPY.ARRAYS FOR NUMERIC COLUMNS OF LOCAL_TABLE_CACHE (ver. 1.1.0.9.0)',
 'ADDED DESCRIPTIONS FOR BROADENING BY H2O (ver. 1.1.0.9.1)',
 'ADDED PROXY SUPPORT IN FETCH AND FETCH_BY_IDS (ver. 1.1.0.9.2)',
+'ADDED LIMIT FOR NUMBER OF LINES DURING TABLE READ (ver. 1.1.0.9.3)',
+'FIXED ABSOLUTE PATH BUG IN TABLE NAMES (ver. 1.1.0.9.4)',
 ]
 
 # version header
@@ -1155,12 +1157,16 @@ def object2transport(ObjectData):
 def getFullTableAndHeaderName(TableName,ext=None):
     #print('TableName=',TableName)
     if ext is None: ext = 'data'
-    fullpath_data = VARIABLES['BACKEND_DATABASE_NAME'] + '/' + TableName + '.' + ext
+    flag_abspath = False # check if the supplied table name already contains absolute path
+    if os.path.isabs(TableName): flag_abspath = True        
+    fullpath_data = TableName + '.' + ext
+    if not flag_abspath: fullpath_data = os.path.join(VARIABLES['BACKEND_DATABASE_NAME'],fullpath_data)
     if not os.path.isfile(fullpath_data):
         fullpath_data = VARIABLES['BACKEND_DATABASE_NAME'] + '/' + TableName + '.par'
         if not os.path.isfile(fullpath_data) and TableName!='sampletab':
             raise Exception('Lonely header \"%s\"' % fullpath_data)
-    fullpath_header = VARIABLES['BACKEND_DATABASE_NAME'] + '/' + TableName + '.header'
+    fullpath_header = TableName + '.header'
+    if not flag_abspath: fullpath_header = os.path.join(VARIABLES['BACKEND_DATABASE_NAME'],fullpath_header)
     return fullpath_data,fullpath_header
 
 def getParameterFormat(ParameterName,TableName):
@@ -1385,12 +1391,23 @@ def cache2storage(TableName):
     TableHeader = getTableHeader(TableName)
     OutfileHeader.write(json.dumps(TableHeader,indent=2))
     
-def storage2cache(TableName,cast=True,ext=None):
-    """NHL"""
+def storage2cache(TableName,cast=True,ext=None,nlines=None):
+    """ edited by NHL
+    TableName: name of the HAPI table to read in
+    ext: file extension
+    nlines: number of line in the block; if None, read all line at once 
+    """
     #print 'storage2cache:'
     #print('TableName',TableName)
+    if nlines is not None:
+        print('WARNING: storage2cache is reading the block of maximum %d lines'%nlines)
     fullpath_data,fullpath_header = getFullTableAndHeaderName(TableName,ext)
-    InfileData = open_(fullpath_data,'r')
+    if TableName in LOCAL_TABLE_CACHE and \
+       'filehandler' in LOCAL_TABLE_CACHE[TableName] and \
+       LOCAL_TABLE_CACHE[TableName]['filehandler'] is not None:
+        InfileData = LOCAL_TABLE_CACHE[TableName]['filehandler'] 
+    else:
+        InfileData = open_(fullpath_data,'r')            
     InfileHeader = open(fullpath_header,'r')
     #try:
     header_text = InfileHeader.read()
@@ -1403,7 +1420,8 @@ def storage2cache(TableName,cast=True,ext=None):
     #print 'Header:'+str(Header)
     LOCAL_TABLE_CACHE[TableName] = {}
     LOCAL_TABLE_CACHE[TableName]['header'] = Header
-    LOCAL_TABLE_CACHE[TableName]['data'] = {}
+    LOCAL_TABLE_CACHE[TableName]['data'] = {}    
+    LOCAL_TABLE_CACHE[TableName]['filehandler'] = InfileData
     # Check if Header['order'] and Header['extra'] contain
     #  parameters with same names, raise exception if true.
     #intersct = set(Header['order']).intersection(set(Header.get('extra',[])))
@@ -1428,10 +1446,17 @@ def storage2cache(TableName,cast=True,ext=None):
     header = LOCAL_TABLE_CACHE[TableName]['header']
     if 'extra' in header and header['extra']:
         line_count = 0
+        flag_EOF = False
         #line_number = LOCAL_TABLE_CACHE[TableName]['header']['number_of_rows']
-        for line in InfileData:
+        #for line in InfileData:
+        while True:
             #print '%d line from %d' % (line_count,line_number)
             #print 'line: '+line #
+            if nlines is not None and line_count>=nlines: break
+            line = InfileData.readline()
+            if line=='': # end of file is represented by an empty string
+                flag_EOF = True
+                break 
             try:
                 RowObject = getRowObjectFromString(line,TableName)
                 line_count += 1
@@ -1487,7 +1512,18 @@ def storage2cache(TableName,cast=True,ext=None):
             #cfunc.__doc__ = 'converter {} {}'.format(qnt, fmt) # doesn't work in earlier versions of Python
             converters.append(cfunc)
             #start = end
-        data_matrix = [[cvt(line) for cvt in converters] for line in InfileData]
+        #data_matrix = [[cvt(line) for cvt in converters] for line in InfileData]
+        flag_EOF = False
+        line_count = 0
+        data_matrix = []
+        while True:
+            if nlines is not None and line_count>=nlines: break   
+            line = InfileData.readline()
+            if line=='': # end of file is represented by an empty string
+                flag_EOF = True
+                break 
+            data_matrix.append([cvt(line) for cvt in converters])
+            line_count += 1
         data_columns = zip(*data_matrix)
         for qnt, col in zip(quantities, data_columns):
             #LOCAL_TABLE_CACHE[TableName]['data'][qnt].extend(col) # old code
@@ -1511,10 +1547,12 @@ def storage2cache(TableName,cast=True,ext=None):
     LOCAL_TABLE_CACHE[TableName]['header']['order'] = glob_order
     LOCAL_TABLE_CACHE[TableName]['header']['format'] = glob_format
     LOCAL_TABLE_CACHE[TableName]['header']['default'] = glob_default
-    InfileData.close()
+    if flag_EOF:
+        InfileData.close()
+        LOCAL_TABLE_CACHE[TableName]['filehandler'] = None
     InfileHeader.close()
     print('                     Lines parsed: %d' % line_count)
-    pass    
+    return flag_EOF    
     
 ## old version based on regular expressions    
 #def storage2cache(TableName):
@@ -19478,7 +19516,6 @@ def absorptionCoefficient_Doppler(Components=None,SourceTables=None,partitionFun
 
     if File: save_to_file(File,Format,Omegas,Xsect)
     return Omegas,Xsect
-
     
 # ---------------------------------------------------------------------------
 # SHORTCUTS AND ALIASES FOR ABSORPTION COEFFICIENTS
