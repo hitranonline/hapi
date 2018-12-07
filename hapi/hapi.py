@@ -53,7 +53,7 @@ if 'io' in sys.modules: # define open using Linux-style line endings
 else:
     open_ = open
 
-HAPI_VERSION = '1.1.0.9.5'; __version__ = HAPI_VERSION
+HAPI_VERSION = '1.1.0.9.6'; __version__ = HAPI_VERSION
 HAPI_HISTORY = [
 'FIXED GRID BUG (ver. 1.1.0.1)',
 'FIXED OUTPUT FORMAT FOR CROSS-SECTIONS (ver. 1.1.0.1)',
@@ -85,6 +85,7 @@ HAPI_HISTORY = [
 'ADDED LIMIT FOR NUMBER OF LINES DURING TABLE READ (ver. 1.1.0.9.3)',
 'FIXED ABSOLUTE PATH BUG IN TABLE NAMES (ver. 1.1.0.9.4)',
 'CORRECTED ABUNDANCE OF THE HD ISOTOPOLOGUE (ver. 1.1.0.9.5)',
+'ADDED UNIFIED INTERFACES FOR ABSCOEF AND XSC CALCULATIONS (ver. 1.1.0.9.6)',
 ]
 
 # version header
@@ -361,7 +362,7 @@ HITRAN_DEFAULT_HEADER = {
   }
 }
 
-PARAMETER_META = \
+PARAMETER_META_ = \
 {
   "global_iso_id" : {
     "id" : 1,
@@ -1149,11 +1150,10 @@ PARAMETER_META = \
   },
 }
 
-def transport2object(TransportData):
-    pass
-
-def object2transport(ObjectData):
-    pass
+# lower the case of all parameter names (fix for case-sensitive databases)
+PARAMETER_META = {}
+for param in PARAMETER_META_:
+    PARAMETER_META[param.lower()] = PARAMETER_META_[param]
 
 def getFullTableAndHeaderName(TableName,ext=None):
     #print('TableName=',TableName)
@@ -3057,7 +3057,7 @@ def prepareHeader(parlist):
     HEADER['extra_format'] = {}
     HEADER['extra_separator'] = ','
     for param in plist:
-        #param = param.lower()
+        param = param.lower()
         HEADER['extra'].append(param)
         HEADER['extra_format'][param] = PARAMETER_META[param]['default_fmt']
         
@@ -18308,9 +18308,7 @@ def absorptionCoefficient_HT(Components=None,SourceTables=None,partitionFunction
                                               HITRAN_units=False,GammaL='gamma_self')
     ---
     """
-   
-    warn('To get the most up-to-date version please check http://hitran.org/hapi')
-   
+      
     # Parameters OmegaRange,OmegaStep,OmegaWing,OmegaWingHW, and OmegaGrid
     # are deprecated and given for backward compatibility with the older versions.
     if WavenumberRange:  OmegaRange=WavenumberRange
@@ -18664,9 +18662,7 @@ def absorptionCoefficient_SDVoigt(Components=None,SourceTables=None,partitionFun
                                               HITRAN_units=False,GammaL='gamma_self')
     ---
     """
-   
-    warn('To get the most up-to-date version please check http://hitran.org/hapi')
-   
+      
     # Paremeters OmegaRange,OmegaStep,OmegaWing,OmegaWingHW, and OmegaGrid
     # are deprecated and given for backward compatibility with the older versions.
     if WavenumberRange:  OmegaRange=WavenumberRange
@@ -19339,7 +19335,7 @@ def absorptionCoefficient_Lorentz(Components=None,SourceTables=None,partitionFun
     return Omegas,Xsect
     
 # Alias for a profile selector
-absorptionCoefficient = absorptionCoefficient_HT
+#absorptionCoefficient = absorptionCoefficient_HT
     
 # ==========================================================================================
 # =========================== /NEW ABSORPTION COEFFICIENT ===================================
@@ -19517,6 +19513,24 @@ def absorptionCoefficient_Doppler(Components=None,SourceTables=None,partitionFun
 
     if File: save_to_file(File,Format,Omegas,Xsect)
     return Omegas,Xsect
+
+# -------------------------------------------------------------------------------
+# UNIFIED INTERFACE FOR THE ABSORPTION COEFFICIENT AND CROSS-SECTION CALCULATIONS
+# -------------------------------------------------------------------------------
+PROFILE_MAP = {
+    'Voigt': absorptionCoefficient_Voigt,
+    'Lorentz': absorptionCoefficient_Lorentz,
+    'Doppler': absorptionCoefficient_Doppler,
+    'SDV': absorptionCoefficient_SDVoigt,
+    'HT': absorptionCoefficient_HT,
+}
+def absorptionCrossSection(profile='HT',**argv):
+    argv['HITRAN_units'] = True
+    return PROFILE_MAP[profile](**argv)
+    
+def absorptionCoefficient(profile='HT',**argv):
+    argv['HITRAN_units'] = False
+    return PROFILE_MAP[profile](**argv)    
     
 # ---------------------------------------------------------------------------
 # SHORTCUTS AND ALIASES FOR ABSORPTION COEFFICIENTS
