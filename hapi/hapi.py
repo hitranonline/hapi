@@ -3434,26 +3434,46 @@ ISO = {
 
 }
 
-def print_iso():
-    print('The dictionary \"ISO\" contains information on isotopologues in HITRAN\n')
-    print('   M    I          id                  iso_name   abundance      mass        mol_name')
+def print_iso(printout=True):
+    if printout:print('The dictionary \"ISO\" contains information on isotopologues in HITRAN\n')
+    if printout:print('   M    I          id                  iso_name   abundance      mass        mol_name')
+    else: df = {'M':[], 'I':[], 'id':[],'iso_name':[], 'abundance':[], 'mass':[],'mol_name':[]} 
     for i in ISO:
         ab = ISO[i][ISO_INDEX['abundance']]
         ma = ISO[i][ISO_INDEX['mass']]
         ab = ab if ab else -1
         ma = ma if ma else -1
-        print('%4i %4i     : %5i %25s %10f %10f %15s' % (i[0],i[1],ISO[i][ISO_INDEX['id']],ISO[i][ISO_INDEX['iso_name']],ab,ma,ISO[i][ISO_INDEX['mol_name']]))
+        if printout: print('%4i %4i     : %5i %25s %10f %10f %15s' % (i[0],i[1],ISO[i][ISO_INDEX['id']],ISO[i][ISO_INDEX['iso_name']],ab,ma,ISO[i][ISO_INDEX['mol_name']]))
+        else: 
+          df['M'] += [i[0]]
+          df['I']+=[i[1]]
+          df['id']+=[ISO[i][ISO_INDEX['id']]]
+          df['iso_name']+=[ISO[i][ISO_INDEX['iso_name']]]
+          df['abundance']+=[ab]
+          df['mass']+=[ma]
+          df['mol_name'] +=[ISO[i][ISO_INDEX['mol_name']]]
+    if not printout: return df
 
-def print_iso_id():
-    print('The dictionary \"ISO_ID\" contains information on \"global\" IDs of isotopologues in HITRAN\n')
-    print('   id            M    I                    iso_name       abundance       mass        mol_name')
+def print_iso_id(printout=True):
+    if printout: print('The dictionary \"ISO_ID\" contains information on \"global\" IDs of isotopologues in HITRAN\n')
+    if printout: print('   id            M    I                    iso_name       abundance       mass        mol_name')
+    else: df = {'id':[],'M':[], 'I':[], 'iso_name':[], 'abundance':[], 'mass':[],'mol_name':[]} 
     for i in ISO_ID:
         ab = ISO_ID[i][ISO_ID_INDEX['abundance']]
         ma = ISO_ID[i][ISO_ID_INDEX['mass']]
         ab = ab if ab else -1
         ma = ma if ma else -1
-        print('%5i     :   %4i %4i   %25s %15.10f %10f %15s' % (i,ISO_ID[i][ISO_ID_INDEX['M']],ISO_ID[i][ISO_ID_INDEX['I']],ISO_ID[i][ISO_ID_INDEX['iso_name']],ab,ma,ISO_ID[i][ISO_ID_INDEX['mol_name']]))
-
+        if printout:print('%5i     :   %4i %4i   %25s %15.10f %10f %15s' % (i,ISO_ID[i][ISO_ID_INDEX['M']],ISO_ID[i][ISO_ID_INDEX['I']],ISO_ID[i][ISO_ID_INDEX['iso_name']],ab,ma,ISO_ID[i][ISO_ID_INDEX['mol_name']]))
+        else: 
+          df['id']+=[i]
+          df['M']+=[ISO_ID[i][ISO_ID_INDEX['M']]]
+          df['I']+=[ISO_ID[i][ISO_ID_INDEX['I']]]
+          df['iso_name']+=[ISO_ID[i][ISO_ID_INDEX['iso_name']]]
+          df['abundance']+=[ab]
+          df['mass']+=[ma]
+          df['mol_name'] += [ISO_ID[i][ISO_ID_INDEX['mol_name']]]
+    if not printout: return df
+    
 profiles = 'profiles'
 def print_profiles():
     print('Profiles available:')
