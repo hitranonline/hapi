@@ -141,7 +141,7 @@ else:
 VARIABLES['PROXY'] = {}
 # EXAMPLE OF PROXY:
 # VARIABLES['PROXY'] = {'http': '127.0.0.1:80'}
-   
+  
 # make it changeable
 VARIABLES['GLOBAL_HOST'] = GLOBAL_HOST
 
@@ -1141,13 +1141,13 @@ PARAMETER_META_ = \
   },
   "eta_HT_air" : {
     "default_fmt" : "%9.6f",
-  },  
-  "gamma_H2O" : {
+  },
+    "gamma_H2O" : {
     "default_fmt" : "%6.4f",
   },
   "n_H2O" : {
     "default_fmt" : "%9.6f",
-  },
+  },  
 }
 
 # lower the case of all parameter names (fix for case-sensitive databases)
@@ -1408,7 +1408,7 @@ def storage2cache(TableName,cast=True,ext=None,nlines=None):
        LOCAL_TABLE_CACHE[TableName]['filehandler'] is not None:
         InfileData = LOCAL_TABLE_CACHE[TableName]['filehandler'] 
     else:
-        InfileData = open_(fullpath_data,'r')            
+        InfileData = open_(fullpath_data,'r')
     InfileHeader = open(fullpath_header,'r')
     #try:
     header_text = InfileHeader.read()
@@ -1421,7 +1421,7 @@ def storage2cache(TableName,cast=True,ext=None,nlines=None):
     #print 'Header:'+str(Header)
     LOCAL_TABLE_CACHE[TableName] = {}
     LOCAL_TABLE_CACHE[TableName]['header'] = Header
-    LOCAL_TABLE_CACHE[TableName]['data'] = {}    
+    LOCAL_TABLE_CACHE[TableName]['data'] = {}
     LOCAL_TABLE_CACHE[TableName]['filehandler'] = InfileData
     # Check if Header['order'] and Header['extra'] contain
     #  parameters with same names, raise exception if true.
@@ -1553,7 +1553,7 @@ def storage2cache(TableName,cast=True,ext=None,nlines=None):
         LOCAL_TABLE_CACHE[TableName]['filehandler'] = None
     InfileHeader.close()
     print('                     Lines parsed: %d' % line_count)
-    return flag_EOF    
+    return flag_EOF     
     
 ## old version based on regular expressions    
 #def storage2cache(TableName):
@@ -18194,7 +18194,7 @@ def getDefaultValuesForXsect(Components,SourceTables,Environment,OmegaRange,
                              OmegaStep,OmegaWing,IntensityThreshold,Format):
     if SourceTables[0] == None:
         SourceTables = ['__BUFFER__',]
-    if Environment == None:
+    if Environment is None:
         Environment = {'T':296., 'p':1.}
     if Components == [None]:
         CompDict = {}
@@ -18211,7 +18211,7 @@ def getDefaultValuesForXsect(Components,SourceTables,Environment,OmegaRange,
             for mol_id,iso_id in MI_zip:
                 CompDict[(mol_id,iso_id)] = None
         Components = CompDict.keys()
-    if OmegaRange == None:
+    if OmegaRange is None:
         omega_min = float('inf')
         omega_max = float('-inf')
         for TableName in SourceTables:
@@ -18223,9 +18223,9 @@ def getDefaultValuesForXsect(Components,SourceTables,Environment,OmegaRange,
             if omega_max < numax:
                 omega_max = numax
         OmegaRange = (omega_min,omega_max)
-    if OmegaStep == None:
+    if OmegaStep is None:
         OmegaStep = 0.01 # cm-1
-    if OmegaWing == None:
+    if OmegaWing is None:
         OmegaWing = 0.0 # cm-1
     if not Format:
         """
@@ -18308,7 +18308,7 @@ def absorptionCoefficient_HT(Components=None,SourceTables=None,partitionFunction
                                               HITRAN_units=False,GammaL='gamma_self')
     ---
     """
-      
+   
     # Parameters OmegaRange,OmegaStep,OmegaWing,OmegaWingHW, and OmegaGrid
     # are deprecated and given for backward compatibility with the older versions.
     if WavenumberRange:  OmegaRange=WavenumberRange
@@ -18662,7 +18662,7 @@ def absorptionCoefficient_SDVoigt(Components=None,SourceTables=None,partitionFun
                                               HITRAN_units=False,GammaL='gamma_self')
     ---
     """
-      
+   
     # Paremeters OmegaRange,OmegaStep,OmegaWing,OmegaWingHW, and OmegaGrid
     # are deprecated and given for backward compatibility with the older versions.
     if WavenumberRange:  OmegaRange=WavenumberRange
@@ -19531,7 +19531,7 @@ def absorptionCrossSection(profile='HT',**argv):
 def absorptionCoefficient(profile='HT',**argv):
     argv['HITRAN_units'] = False
     return PROFILE_MAP[profile](**argv)    
-    
+      
 # ---------------------------------------------------------------------------
 # SHORTCUTS AND ALIASES FOR ABSORPTION COEFFICIENTS
 # ---------------------------------------------------------------------------
