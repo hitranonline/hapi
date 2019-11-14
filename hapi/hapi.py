@@ -53,7 +53,7 @@ if 'io' in sys.modules: # define open using Linux-style line endings
 else:
     open_ = open
 
-HAPI_VERSION = '1.1.0.9.6'; __version__ = HAPI_VERSION
+HAPI_VERSION = '1.1.0.9.7'; __version__ = HAPI_VERSION
 HAPI_HISTORY = [
 'FIXED GRID BUG (ver. 1.1.0.1)',
 'FIXED OUTPUT FORMAT FOR CROSS-SECTIONS (ver. 1.1.0.1)',
@@ -86,6 +86,7 @@ HAPI_HISTORY = [
 'FIXED ABSOLUTE PATH BUG IN TABLE NAMES (ver. 1.1.0.9.4)',
 'CORRECTED ABUNDANCE OF THE HD ISOTOPOLOGUE (ver. 1.1.0.9.5)',
 'ADDED UNIFIED INTERFACES FOR ABSCOEF AND XSC CALCULATIONS (ver. 1.1.0.9.6)',
+'ADDED PARLISTS FOR LINE MIXING (VOIGT AND SDVOIGT) (ver. 1.1.0.9.7)',
 ]
 
 # version header
@@ -1148,6 +1149,18 @@ PARAMETER_META_ = \
   "n_H2O" : {
     "default_fmt" : "%9.6f",
   },
+  "Y_SDV_air_296" : {
+    "default_fmt" : "%10.3e",
+  },
+  "Y_SDV_self_296" : {
+    "default_fmt" : "%10.3e",
+  },
+  "Y_HT_air_296" : {
+    "default_fmt" : "%10.3e",
+  },
+  "Y_HT_self_296" : {
+    "default_fmt" : "%10.3e",
+  },
 }
 
 # lower the case of all parameter names (fix for case-sensitive databases)
@@ -1392,11 +1405,12 @@ def cache2storage(TableName):
     TableHeader = getTableHeader(TableName)
     OutfileHeader.write(json.dumps(TableHeader,indent=2))
     
-def storage2cache(TableName,cast=True,ext=None,nlines=None):
+def storage2cache(TableName,cast=True,ext=None,nlines=None,pos=None):
     """ edited by NHL
     TableName: name of the HAPI table to read in
     ext: file extension
     nlines: number of line in the block; if None, read all line at once 
+    pos: file position to seek
     """
     #print 'storage2cache:'
     #print('TableName',TableName)
@@ -1406,7 +1420,7 @@ def storage2cache(TableName,cast=True,ext=None,nlines=None):
     if TableName in LOCAL_TABLE_CACHE and \
        'filehandler' in LOCAL_TABLE_CACHE[TableName] and \
        LOCAL_TABLE_CACHE[TableName]['filehandler'] is not None:
-        InfileData = LOCAL_TABLE_CACHE[TableName]['filehandler'] 
+        InfileData = LOCAL_TABLE_CACHE[TableName]['filehandler']
     else:
         InfileData = open_(fullpath_data,'r')            
     InfileHeader = open(fullpath_header,'r')
@@ -2917,7 +2931,7 @@ PARLIST_ID = ['trans_id',]
 PARLIST_STANDARD = ['molec_id','local_iso_id','nu','sw','a','elower','gamma_air',
                     'delta_air','gamma_self','n_air','n_self','gp','gpp']
 PARLIST_LABELS = ['statep','statepp']
-PARLIST_LINEMIXING = ['y_air','y_self']
+#PARLIST_LINEMIXING = ['y_air','y_self']
 
 PARLIST_VOIGT_AIR = ['gamma_air','delta_air','deltap_air','n_air']
 PARLIST_VOIGT_SELF = ['gamma_self','delta_self','deltap_self','n_self']
@@ -2925,18 +2939,21 @@ PARLIST_VOIGT_H2 = ['gamma_H2','delta_H2','deltap_H2','n_H2']
 PARLIST_VOIGT_CO2 = ['gamma_CO2','delta_CO2','n_CO2']
 PARLIST_VOIGT_HE = ['gamma_He','delta_He','n_He']
 PARLIST_VOIGT_H2O = ['gamma_H2O','n_H2O']
+PARLIST_VOIGT_LINEMIXING = ['y_air','y_self']
 PARLIST_VOIGT_ALL = mergeParlist(PARLIST_VOIGT_AIR,PARLIST_VOIGT_SELF,
                                  PARLIST_VOIGT_H2,PARLIST_VOIGT_CO2,
-                                 PARLIST_VOIGT_HE,PARLIST_VOIGT_H2O)
+                                 PARLIST_VOIGT_HE,PARLIST_VOIGT_H2O,
+                                 PARLIST_VOIGT_LINEMIXING)
 
 PARLIST_SDVOIGT_AIR = ['gamma_air','delta_air','deltap_air','n_air','SD_air']
 PARLIST_SDVOIGT_SELF = ['gamma_self','delta_self','deltap_self','n_self','SD_self']
 PARLIST_SDVOIGT_H2 = []
 PARLIST_SDVOIGT_CO2 = []
 PARLIST_SDVOIGT_HE = []
+PARLIST_SDVOIGT_LINEMIXING = ['Y_SDV_air_296','Y_SDV_self_296']
 PARLIST_SDVOIGT_ALL = mergeParlist(PARLIST_SDVOIGT_AIR,PARLIST_SDVOIGT_SELF,
                                    PARLIST_SDVOIGT_H2,PARLIST_SDVOIGT_CO2,
-                                   PARLIST_SDVOIGT_HE)
+                                   PARLIST_SDVOIGT_HE,PARLIST_SDVOIGT_LINEMIXING)
 
 PARLIST_GALATRY_AIR = ['gamma_air','delta_air','deltap_air','n_air','beta_g_air']
 PARLIST_GALATRY_SELF = ['gamma_self','delta_self','deltap_self','n_self','beta_g_self']
@@ -2955,7 +2972,7 @@ PARLIST_HT_SELF = ['gamma_HT_0_self_50','n_HT_self_50','gamma_HT_2_self_50',
                    'delta_HT_0_self_296','deltap_HT_self_296','delta_HT_2_self_296',
                    'gamma_HT_0_self_700','n_HT_self_700','gamma_HT_2_self_700',
                    'delta_HT_0_self_700','deltap_HT_self_700','delta_HT_2_self_700',
-                   'nu_HT_self','kappa_HT_self','eta_HT_self']
+                   'nu_HT_self','kappa_HT_self','eta_HT_self','Y_HT_self_296']
 #PARLIST_HT_AIR = ['gamma_HT_0_air_50','n_HT_air_50','gamma_HT_2_air_50',
 #                  'delta_HT_0_air_50','deltap_HT_air_50','delta_HT_2_air_50',
 #                  'gamma_HT_0_air_150','n_HT_air_150','gamma_HT_2_air_150',
@@ -2967,12 +2984,13 @@ PARLIST_HT_SELF = ['gamma_HT_0_self_50','n_HT_self_50','gamma_HT_2_self_50',
 #                  'nu_HT_air','kappa_HT_air','eta_HT_air']
 PARLIST_HT_AIR = ['gamma_HT_0_air_296','n_HT_air_296','gamma_HT_2_air_296',
                   'delta_HT_0_air_296','deltap_HT_air_296','delta_HT_2_air_296',
-                  'nu_HT_air','kappa_HT_air','eta_HT_air']
+                  'nu_HT_air','kappa_HT_air','eta_HT_air','Y_HT_air_296']
 PARLIST_HT_ALL = mergeParlist(PARLIST_HT_SELF,PARLIST_HT_AIR)
                                    
 PARLIST_ALL = mergeParlist(PARLIST_ID,PARLIST_DOTPAR,PARLIST_STANDARD,
-                           PARLIST_LABELS,PARLIST_LINEMIXING,PARLIST_VOIGT_ALL,
-                           PARLIST_SDVOIGT_ALL,PARLIST_GALATRY_ALL,PARLIST_HT_ALL)
+                           PARLIST_LABELS,PARLIST_VOIGT_ALL,
+                           PARLIST_SDVOIGT_ALL,PARLIST_GALATRY_ALL,
+                           PARLIST_HT_ALL)
 
 PARAMETER_GROUPS = {
   'par_line' : PARLIST_DOTPAR,
@@ -2981,19 +2999,21 @@ PARAMETER_GROUPS = {
   'id' : PARLIST_ID,
   'standard' : PARLIST_STANDARD,
   'labels' : PARLIST_LABELS,
-  'linemixing' : PARLIST_LINEMIXING,
+  #'linemixing' : PARLIST_LINEMIXING,
   'voigt_air' : PARLIST_VOIGT_AIR,
   'voigt_self' : PARLIST_VOIGT_SELF,
   'voigt_h2' : PARLIST_VOIGT_H2,
   'voigt_co2' : PARLIST_VOIGT_CO2,
   'voigt_he' : PARLIST_VOIGT_HE,
   'voigt_h2o' : PARLIST_VOIGT_H2O,
+  'voigt_linemixing': PARLIST_VOIGT_LINEMIXING,
   'voigt' : PARLIST_VOIGT_ALL,
   'sdvoigt_air' : PARLIST_SDVOIGT_AIR,
   'sdvoigt_self' : PARLIST_SDVOIGT_SELF,
   'sdvoigt_h2' : PARLIST_SDVOIGT_H2,
   'sdvoigt_co2' : PARLIST_SDVOIGT_CO2,
   'sdvoigt_he' : PARLIST_SDVOIGT_HE,
+  'sdvoigt_linemixing': PARLIST_SDVOIGT_LINEMIXING,
   'sdvoigt' : PARLIST_SDVOIGT_ALL,
   'galatry_air' : PARLIST_GALATRY_AIR,
   'galatry_self' : PARLIST_GALATRY_SELF,
