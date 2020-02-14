@@ -1259,7 +1259,18 @@ def formatString(par_format,par_value,lang='FORTRAN'):
     # PYTHON RULE: if N is abcent, default value is 6
     regex = FORMAT_PYTHON_REGEX
     (lng,trail,lngpnt,ty) = re.search(regex,par_format).groups()
-    result = par_format % par_value
+
+    if int(lng) == 1 and ty is 'd':
+        # isotopologue ids 10 and above are special cases:
+        if par_value == 10:
+            result = '0'
+        elif par_value > 10:
+            # handle isotopologue ids 11 and above
+            result = chr(ord('A') + (par_value - 11))
+        else:
+            result = par_format % par_value
+    else:
+        result = par_format % par_value
     if ty.lower() in set(['f','e']):
        lng = int(lng) if lng else 0
        lngpnt = int(lngpnt) if lngpnt else 0
