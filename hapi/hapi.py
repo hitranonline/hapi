@@ -53,7 +53,7 @@ if 'io' in sys.modules: # define open using Linux-style line endings
 else:
     open_ = open
 
-HAPI_VERSION = '1.1.0.9.7'; __version__ = HAPI_VERSION
+HAPI_VERSION = '1.1.1.0'; __version__ = HAPI_VERSION
 HAPI_HISTORY = [
 'FIXED GRID BUG (ver. 1.1.0.1)',
 'FIXED OUTPUT FORMAT FOR CROSS-SECTIONS (ver. 1.1.0.1)',
@@ -87,6 +87,7 @@ HAPI_HISTORY = [
 'CORRECTED ABUNDANCE OF THE HD ISOTOPOLOGUE (ver. 1.1.0.9.5)',
 'ADDED UNIFIED INTERFACES FOR ABSCOEF AND XSC CALCULATIONS (ver. 1.1.0.9.6)',
 'ADDED PARLISTS FOR LINE MIXING (VOIGT AND SDVOIGT) (ver. 1.1.0.9.7)',
+'ADDED SUPPORT FOR ROSENKRANZ LM PARAMETERS TO PCQSDHC AND LORENTZ (ver. 1.1.1.0)',
 ]
 
 # version header
@@ -17832,7 +17833,7 @@ VARIABLES['CPF'] = hum1_wei
 #VARIABLES['CPF'] = cpf
     
 # ------------------ Hartmann-Tran Profile (HTP) ------------------------
-def pcqsdhc(sg0,GamD,Gam0,Gam2,Shift0,Shift2,anuVC,eta,sg):
+def pcqsdhc(sg0,GamD,Gam0,Gam2,Shift0,Shift2,anuVC,eta,sg,Ylm=0.0):
     #-------------------------------------------------
     #      "pCqSDHC": partially-Correlated quadratic-Speed-Dependent Hard-Collision
     #      Subroutine to Compute the complex normalized spectral shape of an 
@@ -17857,6 +17858,7 @@ def pcqsdhc(sg0,GamD,Gam0,Gam2,Shift0,Shift2,anuVC,eta,sg):
     #      Shift0     : Speed-averaged line-shift in cm-1 (Input).
     #      Shift2     : Speed dependence of the line-shift in cm-1 (Input)       
     #      sg         : Current WaveNumber of the Computation in cm-1 (Input).
+    #      Ylm        : 1st order (Rosenkranz) line mixing coefficients in cm-1 (Input)
     #
     #      Output Quantities (through Common Statements)
     #      -----------------
@@ -18004,8 +18006,9 @@ def pcqsdhc(sg0,GamD,Gam0,Gam2,Shift0,Shift2,anuVC,eta,sg):
             Bterm_GLOBAL[index_PART3] = Bterm
             
     # common part
+    # LINE MIXING PART NEEDS FURTHER TESTING, USE WITH CAUTION!!!
     LS_pCqSDHC = (1.0e0/pi) * (Aterm_GLOBAL / (1.0e0 - (anuVC-eta*(c0-1.5e0*c2))*Aterm_GLOBAL + eta*c2*Bterm_GLOBAL))
-    return LS_pCqSDHC.real,LS_pCqSDHC.imag
+    return LS_pCqSDHC.real + Ylm*LS_pCqSDHC.imag, LS_pCqSDHC.imag
 
 
 
@@ -18013,7 +18016,7 @@ def pcqsdhc(sg0,GamD,Gam0,Gam2,Shift0,Shift2,anuVC,eta,sg):
 
 # set interfaces for profiles
 
-def PROFILE_HT(sg0,GamD,Gam0,Gam2,Shift0,Shift2,anuVC,eta,sg):
+def PROFILE_HT(sg0,GamD,Gam0,Gam2,Shift0,Shift2,anuVC,eta,sg,Ylm=0.0):
     """
     #-------------------------------------------------
     #      "pCqSDHC": partially-Correlated quadratic-Speed-Dependent Hard-Collision
@@ -18051,6 +18054,7 @@ def PROFILE_HT(sg0,GamD,Gam0,Gam2,Shift0,Shift2,anuVC,eta,sg):
     #      Shift0  : Speed-averaged line-shift in cm-1 (Input).
     #      Shift2  : Speed dependence of the line-shift in cm-1 (Input)       
     #      sg      : Current WaveNumber of the Computation in cm-1 (Input).
+    #      Ylm     : 1st order (Rosenkranz) line mixing coefficients in cm-1 (Input)
     #
     #      The function has two outputs:
     #      -----------------
@@ -18064,11 +18068,11 @@ def PROFILE_HT(sg0,GamD,Gam0,Gam2,Shift0,Shift2,anuVC,eta,sg):
     #
     #-------------------------------------------------
     """
-    return pcqsdhc(sg0,GamD,Gam0,Gam2,Shift0,Shift2,anuVC,eta,sg)
+    return pcqsdhc(sg0,GamD,Gam0,Gam2,Shift0,Shift2,anuVC,eta,sg,Ylm)
 
 PROFILE_HTP = PROFILE_HT # stub for backwards compatibility
 
-def PROFILE_SDRAUTIAN(sg0,GamD,Gam0,Gam2,Shift0,Shift2,anuVC,sg):
+def PROFILE_SDRAUTIAN(sg0,GamD,Gam0,Gam2,Shift0,Shift2,anuVC,sg,Ylm=0.0):
     """
     # Speed dependent Rautian profile based on HTP.
     # Input parameters:
@@ -18080,10 +18084,11 @@ def PROFILE_SDRAUTIAN(sg0,GamD,Gam0,Gam2,Shift0,Shift2,anuVC,sg):
     #      Shift0  : Speed-averaged line-shift in cm-1 (Input).
     #      Shift2  : Speed dependence of the line-shift in cm-1 (Input)       
     #      sg      : Current WaveNumber of the Computation in cm-1 (Input).
+    #      Ylm     : 1st order (Rosenkranz) line mixing coefficients in cm-1 (Input)
     """
-    return pcqsdhc(sg0,GamD,Gam0,Gam2,Shift0,Shift2,anuVC,cZero,sg)
+    return pcqsdhc(sg0,GamD,Gam0,Gam2,Shift0,Shift2,anuVC,cZero,sg,Ylm)
 
-def PROFILE_RAUTIAN(sg0,GamD,Gam0,Shift0,anuVC,eta,sg):
+def PROFILE_RAUTIAN(sg0,GamD,Gam0,Shift0,anuVC,eta,sg,Ylm=0.0):
     """
     # Rautian profile based on HTP.
     # Input parameters:
@@ -18093,10 +18098,11 @@ def PROFILE_RAUTIAN(sg0,GamD,Gam0,Shift0,anuVC,eta,sg):
     #      anuVC   : Velocity-changing frequency in cm-1 (Input).
     #      Shift0  : Speed-averaged line-shift in cm-1 (Input).
     #      sg      : Current WaveNumber of the Computation in cm-1 (Input).
+    #      Ylm     : 1st order (Rosenkranz) line mixing coefficients in cm-1 (Input)
     """
-    return pcqsdhc(sg0,GamD,Gam0,cZero,Shift0,cZero,anuVC,cZero,sg)
+    return pcqsdhc(sg0,GamD,Gam0,cZero,Shift0,cZero,anuVC,cZero,sg,Ylm)
 
-def PROFILE_SDVOIGT(sg0,GamD,Gam0,Gam2,Shift0,Shift2,sg):
+def PROFILE_SDVOIGT(sg0,GamD,Gam0,Gam2,Shift0,Shift2,sg,Ylm=0.0):
     """
     # Speed dependent Voigt profile based on HTP.
     # Input parameters:
@@ -18107,29 +18113,36 @@ def PROFILE_SDVOIGT(sg0,GamD,Gam0,Gam2,Shift0,Shift2,sg):
     #      Shift0  : Speed-averaged line-shift in cm-1 (Input).
     #      Shift2  : Speed dependence of the line-shift in cm-1 (Input)       
     #      sg      : Current WaveNumber of the Computation in cm-1 (Input).
+    #      Ylm     : 1st order (Rosenkranz) line mixing coefficients in cm-1 (Input)
     """
-    return pcqsdhc(sg0,GamD,Gam0,Gam2,Shift0,Shift2,cZero,cZero,sg)
+    return pcqsdhc(sg0,GamD,Gam0,Gam2,Shift0,Shift2,cZero,cZero,sg,Ylm)
     
-def PROFILE_VOIGT(sg0,GamD,Gam0,sg):
+def PROFILE_VOIGT(sg0,GamD,Gam0,sg,Ylm=0.0):
     """
     # Voigt profile based on HTP.
     # Input parameters:
-    #   sg0: Unperturbed line position in cm-1 (Input).
-    #   GamD: Doppler HWHM in cm-1 (Input)
-    #   Gam0: Speed-averaged line-width in cm-1 (Input).       
-    #   sg: Current WaveNumber of the Computation in cm-1 (Input).
+    #   sg0  : Unperturbed line position in cm-1 (Input).
+    #   GamD : Doppler HWHM in cm-1 (Input)
+    #   Gam0 : Speed-averaged line-width in cm-1 (Input).       
+    #   sg   : Current WaveNumber of the Computation in cm-1 (Input).
+    #   Ylm  : 1st order (Rosenkranz) line mixing coefficients in cm-1 (Input)
     """
-    return PROFILE_HTP(sg0,GamD,Gam0,cZero,cZero,cZero,cZero,cZero,sg)
+    return PROFILE_HTP(sg0,GamD,Gam0,cZero,cZero,cZero,cZero,cZero,sg,Ylm)
 
-def PROFILE_LORENTZ(sg0,Gam0,sg):
+def PROFILE_LORENTZ(sg0,Gam0,sg,Ylm=0.0):
     """
     # Lorentz profile.
     # Input parameters:
-    #   sg0: Unperturbed line position in cm-1 (Input).
-    #   Gam0: Speed-averaged line-width in cm-1 (Input).       
-    #   sg: Current WaveNumber of the Computation in cm-1 (Input).
+    #   sg0  : Unperturbed line position in cm-1 (Input).
+    #   Gam0 : Speed-averaged line-width in cm-1 (Input).       
+    #   sg   : Current WaveNumber of the Computation in cm-1 (Input).
+    #   Ylm  : 1st order (Rosenkranz) line mixing coefficients in cm-1 (Input)
     """
-    return Gam0/(pi*(Gam0**2+(sg-sg0)**2))
+    # reduce the extra calculations in the case if Ylm is zero:
+    if Ylm==0.0:
+        return Gam0/(pi*(Gam0**2+(sg-sg0)**2))
+    else:
+        return (Gam0+Ylm*(sg-sg0))/(pi*(Gam0**2+(sg-sg0)**2))
 
 def PROFILE_DOPPLER(sg0,GamD,sg):
     """
@@ -18288,7 +18301,7 @@ def absorptionCoefficient_HT(Components=None,SourceTables=None,partitionFunction
                                 File=None, Format=None, OmegaGrid=None,
                                 WavenumberRange=None,WavenumberStep=None,WavenumberWing=None,
                                 WavenumberWingHW=None,WavenumberGrid=None,
-                                Diluent={},EnvDependences=None):
+                                Diluent={},EnvDependences=None,LineMixingRosen=False):
     """
     INPUT PARAMETERS: 
         Components:  list of tuples [(M,I,D)], where
@@ -18310,6 +18323,7 @@ def absorptionCoefficient_HT(Components=None,SourceTables=None,partitionFunction
         HITRAN_units:  use cm2/molecule (True) or cm-1 (False) for absorption coefficient
         File:   write output to file (if specified)
         Format:  c-format of file output (accounts for significant digits in WavenumberStep)
+        LineMixingRosen: include 1st order line mixing to calculation
     OUTPUT PARAMETERS: 
         Wavenum: wavenumber grid with respect to parameters WavenumberRange and WavenumberStep
         Xsect: absorption coefficient calculated on the grid
@@ -18328,6 +18342,9 @@ def absorptionCoefficient_HT(Components=None,SourceTables=None,partitionFunction
                                               HITRAN_units=False,GammaL='gamma_self')
     ---
     """
+    
+    if LineMixingRosen is True:
+        raise NotImplementedError('line mixing is not implemented yet for this function')
       
     # Parameters OmegaRange,OmegaStep,OmegaWing,OmegaWingHW, and OmegaGrid
     # are deprecated and given for backward compatibility with the older versions.
@@ -18564,7 +18581,7 @@ def absorptionCoefficient_HT(Components=None,SourceTables=None,partitionFunction
                 # Search for speed dependence for HWHM.
                 try:
                     Gamma2DB = LOCAL_TABLE_CACHE[TableName]['data']['gamma_HT_2_%s_%d'%(species_lower,TrefHT)][RowID]
-                    if Gamma2DB ==0.: raise KeyError
+                    #if Gamma2DB ==0.: raise KeyError
                     if VARIABLES['DEBUG']: print('absorptionCoefficient_HT: Gamma2DB=%f (found as %s)'%(Gamma2DB,'gamma_HT_2_%s_%d'%(species_lower,TrefHT)))
                 except KeyError:
                     try:
@@ -18642,7 +18659,7 @@ def absorptionCoefficient_SDVoigt(Components=None,SourceTables=None,partitionFun
                                 File=None, Format=None, OmegaGrid=None,
                                 WavenumberRange=None,WavenumberStep=None,WavenumberWing=None,
                                 WavenumberWingHW=None,WavenumberGrid=None,
-                                Diluent={},EnvDependences=None):
+                                Diluent={},EnvDependences=None,LineMixingRosen=False):
     """
     INPUT PARAMETERS: 
         Components:  list of tuples [(M,I,D)], where
@@ -18664,6 +18681,7 @@ def absorptionCoefficient_SDVoigt(Components=None,SourceTables=None,partitionFun
         HITRAN_units:  use cm2/molecule (True) or cm-1 (False) for absorption coefficient
         File:   write output to file (if specified)
         Format:  c-format of file output (accounts for significant digits in WavenumberStep)
+        LineMixingRosen: include 1st order line mixing to calculation
     OUTPUT PARAMETERS: 
         Wavenum: wavenumber grid with respect to parameters WavenumberRange and WavenumberStep
         Xsect: absorption coefficient calculated on the grid
@@ -18682,7 +18700,7 @@ def absorptionCoefficient_SDVoigt(Components=None,SourceTables=None,partitionFun
                                               HITRAN_units=False,GammaL='gamma_self')
     ---
     """
-      
+    
     # Paremeters OmegaRange,OmegaStep,OmegaWing,OmegaWingHW, and OmegaGrid
     # are deprecated and given for backward compatibility with the older versions.
     if WavenumberRange:  OmegaRange=WavenumberRange
@@ -18819,7 +18837,7 @@ def absorptionCoefficient_SDVoigt(Components=None,SourceTables=None,partitionFun
             GammaD = sqrt(2*cBolts*T*log(2)/m/cc**2)*LineCenterDB
             
             #   pressure broadening coefficient
-            Gamma0 = 0.; Shift0 = 0.; Gamma2 = 0.; Shift2 = 0.
+            Gamma0 = 0.; Shift0 = 0.; Gamma2 = 0.; Shift2 = 0.; Ylm = 0.
             for species in Diluent:
                 species_lower = species # species_lower = species.lower() # CHANGED RJH 23MAR18
                 
@@ -18859,21 +18877,32 @@ def absorptionCoefficient_SDVoigt(Components=None,SourceTables=None,partitionFun
                 Shift0 += abun*CustomEnvDependences.get(delta_name, # default ->
                           ((Shift0DB + deltap*(T-Tref))*p/pref))
             
-                SD_name = 'SD_' + species_lower
+                SD_name = 'sd_' + species_lower
                 try:
                     SDDB = LOCAL_TABLE_CACHE[TableName]['data'][SD_name][RowID]
                 except:
                     SDDB = 0.0
 
                 Gamma2 += abun*CustomEnvDependences.get(SD_name, # default ->
-                          SDDB*p/pref) * Gamma0DB
+                          SDDB*p/pref) * Gamma0DB # SDDB IS DIMENSIONLESS (LIKE THE ONES M. DEVI USED)
 
+                Y_name = 'y_sdv_' + species_lower + '_296' # this time only 296K; should be remade in case of multiple temperature references!
+                try:
+                    YlmDB = LOCAL_TABLE_CACHE[TableName]['data'][Y_name][RowID]
+                except:
+                    YlmDB = 0.0
+
+                Ylm += abun*CustomEnvDependences.get(Y_name, # default ->
+                          YlmDB*p/pref) # TODO: CHECK                          
+                
+                if not LineMixingRosen: Ylm = 0.0
+                          
             #   get final wing of the line according to Gamma0, OmegaWingHW and OmegaWing
             OmegaWingF = max(OmegaWing,OmegaWingHW*Gamma0,OmegaWingHW*GammaD)
 
             BoundIndexLower = bisect(Omegas,LineCenterDB-OmegaWingF)
             BoundIndexUpper = bisect(Omegas,LineCenterDB+OmegaWingF)
-            lineshape_vals = PROFILE_SDVOIGT(LineCenterDB,GammaD,Gamma0,Gamma2,Shift0,Shift2,Omegas[BoundIndexLower:BoundIndexUpper])[0]
+            lineshape_vals = PROFILE_SDVOIGT(LineCenterDB,GammaD,Gamma0,Gamma2,Shift0,Shift2,Omegas[BoundIndexLower:BoundIndexUpper],Ylm)[0]
             Xsect[BoundIndexLower:BoundIndexUpper] += factor / NATURAL_ABUNDANCES[(MoleculeNumberDB,IsoNumberDB)] * \
                                                       ABUNDANCES[(MoleculeNumberDB,IsoNumberDB)] * \
                                                       LineIntensity * lineshape_vals
@@ -18890,7 +18919,7 @@ def absorptionCoefficient_Voigt(Components=None,SourceTables=None,partitionFunct
                                 File=None, Format=None, OmegaGrid=None,
                                 WavenumberRange=None,WavenumberStep=None,WavenumberWing=None,
                                 WavenumberWingHW=None,WavenumberGrid=None,
-                                Diluent={},EnvDependences=None):
+                                Diluent={},EnvDependences=None,LineMixingRosen=False):
     """
     INPUT PARAMETERS: 
         Components:  list of tuples [(M,I,D)], where
@@ -18912,6 +18941,7 @@ def absorptionCoefficient_Voigt(Components=None,SourceTables=None,partitionFunct
         HITRAN_units:  use cm2/molecule (True) or cm-1 (False) for absorption coefficient
         File:   write output to file (if specified)
         Format:  c-format of file output (accounts for significant digits in WavenumberStep)
+        LineMixingRosen: include 1st order line mixing to calculation
     OUTPUT PARAMETERS: 
         Wavenum: wavenumber grid with respect to parameters WavenumberRange and WavenumberStep
         Xsect: absorption coefficient calculated on the grid
@@ -18930,7 +18960,10 @@ def absorptionCoefficient_Voigt(Components=None,SourceTables=None,partitionFunct
                                               HITRAN_units=False,GammaL='gamma_self')
     ---
     """
-   
+
+    if LineMixingRosen is True:
+        raise NotImplementedError('line mixing is not implemented yet for this function')
+    
     # Paremeters OmegaRange,OmegaStep,OmegaWing,OmegaWingHW, and OmegaGrid
     # are deprecated and given for backward compatibility with the older versions.
     if WavenumberRange:  OmegaRange=WavenumberRange
