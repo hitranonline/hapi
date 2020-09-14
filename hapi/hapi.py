@@ -18633,9 +18633,9 @@ def absorptionCoefficient_HT(Components=None,SourceTables=None,partitionFunction
                     EtaDB = 0.
                     if VARIABLES['DEBUG']: print('absorptionCoefficient_HT: EtaDB=%f (not found in database)'%EtaDB)
                 
-                EtaNumer += EtaDB*abun*(Gamma0T+1j*Shift0T)
+                EtaNumer += EtaDB*abun*(Gamma0T-1j*Shift0T)
                 
-            Eta = EtaNumer/(Gamma0 + 1j*Shift0)
+            Eta = EtaNumer/(Gamma0-1j*Shift0)
                     
             #   get final wing of the line according to Gamma0, OmegaWingHW and OmegaWing
             OmegaWingF = max(OmegaWing,OmegaWingHW*Gamma0,OmegaWingHW*GammaD)
