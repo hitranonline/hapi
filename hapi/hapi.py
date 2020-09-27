@@ -159,7 +159,7 @@ def arange_(lower,upper,step):
     if abs((upper-upper_new)-step) < 1e-10:
         upper_new += step
         npnt += 1    
-    return linspace(lower,upper_new,npnt)
+    return linspace(lower,upper_new,int(npnt))
 
 # ---------------------------------------------------------------
 # ---------------------------------------------------------------
@@ -18491,8 +18491,8 @@ def absorptionCoefficient_HT(Components=None,SourceTables=None,partitionFunction
             m = molecularMass(MoleculeNumberDB,IsoNumberDB) * cMassMol * 1000
             GammaD = sqrt(2*cBolts*T*log(2)/m/cc**2)*LineCenterDB
             
-            #   pressure broadening coefficient
-            Gamma0 = 0.; Shift0 = 0.; Gamma2 = 0.; Shift2 = 0.; NuVC = 0.; EtaNumer = 0.;
+            #   pressure broadening coefficients
+            Gamma0 = 0.; Shift0 = 0.; Gamma2 = 0.; Shift2 = 0.; Eta = 0; NuVC = 0.
             for species in Diluent:
                 species_lower = species # species_lower = species.lower() # CHANGED RJH 23MAR18
                 
@@ -18593,7 +18593,8 @@ def absorptionCoefficient_HT(Components=None,SourceTables=None,partitionFunction
                         Gamma2DB = 0.0
                         if VARIABLES['DEBUG']: print('absorptionCoefficient_HT: Gamma2DB=%f (not found in database)'%Gamma2DB)
 
-                Gamma2 += abun*CustomEnvDependences.get('gamma_HT_2_%s_%d'%(species_lower,TrefHT),Gamma2DB*(p/pref))
+                Gamma2T = CustomEnvDependences.get('gamma_HT_2_%s_%d'%(species_lower,TrefHT),Gamma2DB*(p/pref))
+                Gamma2 += abun*Gamma2T
                 
                 # Search for speed dependence for shift.
                 try:
@@ -18603,10 +18604,20 @@ def absorptionCoefficient_HT(Components=None,SourceTables=None,partitionFunction
                     Shift2DB = 0.
                     if VARIABLES['DEBUG']: print('absorptionCoefficient_HT: Shift2DB=%f (not found in database)'%Shift2DB)
                 
-                Shift2 += abun*CustomEnvDependences.get('delta_HT_2_%s_%d'%(species_lower,TrefHT),
-                                Shift2DB*p/pref)
+                Shift2T = CustomEnvDependences.get('delta_HT_2_%s_%d'%(species_lower,TrefHT),Shift2DB*p/pref)
+                Shift2 += abun*Shift2T
                 
-                # Search for frequency of VC
+                # Setup correlation parameter
+                try:
+                    EtaDB = LOCAL_TABLE_CACHE[TableName]['data']['eta_HT_%s'%species_lower][RowID]
+                    if VARIABLES['DEBUG']: print('absorptionCoefficient_HT: EtaDB=%f (found as %s)'%(EtaDB,'eta_HT_%s'%species_lower))
+                except KeyError:
+                    EtaDB = 0.
+                    if VARIABLES['DEBUG']: print('absorptionCoefficient_HT: EtaDB=%f (not found in database)'%EtaDB)
+                    
+                Eta += EtaDB*abun*(Gamma2T-1j*Shift2T)
+                
+                # Search for frequency of VC (general formula depends on Eta)
                 try:
                     NuVCDB = LOCAL_TABLE_CACHE[TableName]['data']['nu_HT_%s'%species_lower][RowID]
                     if VARIABLES['DEBUG']: print('absorptionCoefficient_HT: NuVCDB=%f (found as %s)'%(NuVCDB,'nu_HT_%s'%species_lower))
@@ -18621,24 +18632,26 @@ def absorptionCoefficient_HT(Components=None,SourceTables=None,partitionFunction
                 except KeyError:
                     KappaDB = 0.
                     if VARIABLES['DEBUG']: print('absorptionCoefficient_HT: KappaDB=%f (not found in database)'%KappaDB)
-                    
+                
+                # 1st NuVC component: weighted sum of NuVC_i
                 NuVC += abun*CustomEnvDependences.get('nu_HT_%s'%species_lower,
                              NuVCDB*(Tref/T)**KappaDB*p)
-                             
-                # Setup correlation parameter
-                try:
-                    EtaDB = LOCAL_TABLE_CACHE[TableName]['data']['eta_HT_%s'%species_lower][RowID]
-                    if VARIABLES['DEBUG']: print('absorptionCoefficient_HT: EtaDB=%f (found as %s)'%(EtaDB,'eta_HT_%s'%species_lower))
-                except KeyError:
-                    EtaDB = 0.
-                    if VARIABLES['DEBUG']: print('absorptionCoefficient_HT: EtaDB=%f (not found in database)'%EtaDB)
                 
-                EtaNumer += EtaDB*abun*(Gamma0T-1j*Shift0T)
-                
-            Eta = EtaNumer/(Gamma0-1j*Shift0)
-                    
-            #   get final wing of the line according to Gamma0, OmegaWingHW and OmegaWing
+                # 2nd NuVC component (with negative sign)
+                NuVC -= EtaDB*abun*(Gamma0T-1j*Shift0T)
+                        
+            # Calculate Eta by dividing the sum on (Gamma2-1j*Shift2)
+            if Eta!=0: Eta /= Gamma2-1j*Shift2  # (avoid division-by-zero ambiguity)
+            
+            # 3rd (final) NuVC component, depending on final Eta parameter
+            NuVC += Eta*(Gamma0-1j*Shift0)
+                                    
+            # get final wing of the line according to Gamma0, OmegaWingHW and OmegaWing
             OmegaWingF = max(OmegaWing,OmegaWingHW*Gamma0,OmegaWingHW*GammaD)
+            
+            # convert to float type if imaginary parts are zero (avoiding warnings in pcqsdhc)  
+            #if Eta.imag==0: Eta=Eta.real
+            #if NuVC.imag==0: NuVC=NuVC.real
 
             BoundIndexLower = bisect(Omegas,LineCenterDB-OmegaWingF)
             BoundIndexUpper = bisect(Omegas,LineCenterDB+OmegaWingF)
