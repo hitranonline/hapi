@@ -53,7 +53,7 @@ if 'io' in sys.modules: # define open using Linux-style line endings
 else:
     open_ = open
 
-HAPI_VERSION = '1.1.1.0'; __version__ = HAPI_VERSION
+HAPI_VERSION = '1.1.2.0'; __version__ = HAPI_VERSION
 HAPI_HISTORY = [
 'FIXED GRID BUG (ver. 1.1.0.1)',
 'FIXED OUTPUT FORMAT FOR CROSS-SECTIONS (ver. 1.1.0.1)',
@@ -88,6 +88,7 @@ HAPI_HISTORY = [
 'ADDED UNIFIED INTERFACES FOR ABSCOEF AND XSC CALCULATIONS (ver. 1.1.0.9.6)',
 'ADDED PARLISTS FOR LINE MIXING (VOIGT AND SDVOIGT) (ver. 1.1.0.9.7)',
 'ADDED SUPPORT FOR ROSENKRANZ LM PARAMETERS TO PCQSDHC AND LORENTZ (ver. 1.1.1.0)',
+'FIXED THE TYPEERROR IN ARANGE (ver. 1.1.2.0)',
 ]
 
 # version header
