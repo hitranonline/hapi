@@ -1,7 +1,7 @@
 # HITRAN Application Programming Interface (HAPI)
 ===============================================
 
-Current version: 1.1.0.9.6
+Current version: 1.1.2.0
 
 ## Version history
 
@@ -36,6 +36,9 @@ Current version: 1.1.0.9.6
   29) FIXED ABSOLUTE PATH BUG IN TABLE NAMES (ver. 1.1.0.9.4)
   30) CORRECTED ABUNDANCE OF THE HD ISOTOPOLOGUE (ver. 1.1.0.9.5)
   31) ADDED UNIFIED INTERFACES FOR ABSCOEF AND XSC CALCULATIONS (ver. 1.1.0.9.6)
+  32) ADDED PARLISTS FOR LINE MIXING (VOIGT AND SDVOIGT) (ver. 1.1.0.9.7)
+  33) ADDED SUPPORT FOR ROSENKRANZ LM PARAMETERS TO PCQSDHC AND LORENTZ (ver. 1.1.1.0)
+  34) FIXED THE TYPEERROR IN ARANGE (ver. 1.1.2.0)
 
 ## Introduction
 
