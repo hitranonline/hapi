@@ -1,7 +1,7 @@
 # HITRAN Application Programming Interface (HAPI)
 ===============================================
 
-Current version: 1.2.0.0
+Current version: 1.2.2.0
 
 ## Version history
 
@@ -40,6 +40,8 @@ Current version: 1.2.0.0
   33) ADDED SUPPORT FOR ROSENKRANZ LM PARAMETERS TO PCQSDHC AND LORENTZ (ver. 1.1.1.0)
   34) FIXED THE TYPEERROR IN ARANGE (ver. 1.1.2.0)
   35) ADDED NEW FUNCTIONAL INTERFACES FOR ALL CROSS-SECTION CALCULATING ROUTINES (ver. 1.2.0.0)
+  36) ADDED CALCULATION OF THE ISO_ID TABLE ON STARTUP (ver. 1.2.1.0)
+  37) ADDED SUPPORT FOR TIPS-2021 (ver. 1.2.2.0)
 
 ## Introduction
 
