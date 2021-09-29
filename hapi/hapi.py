@@ -35,6 +35,7 @@ from numpy import any,minimum,maximum
 from numpy import sort as npsort
 from bisect import bisect
 from warnings import warn,simplefilter
+from time import time
 import pydoc
 
 # Enable warning repetitions
@@ -53,7 +54,7 @@ if 'io' in sys.modules: # define open using Linux-style line endings
 else:
     open_ = open
 
-HAPI_VERSION = '1.1.2.0'; __version__ = HAPI_VERSION
+HAPI_VERSION = '1.2.0.0'; __version__ = HAPI_VERSION
 HAPI_HISTORY = [
 'FIXED GRID BUG (ver. 1.1.0.1)',
 'FIXED OUTPUT FORMAT FOR CROSS-SECTIONS (ver. 1.1.0.1)',
@@ -89,6 +90,7 @@ HAPI_HISTORY = [
 'ADDED PARLISTS FOR LINE MIXING (VOIGT AND SDVOIGT) (ver. 1.1.0.9.7)',
 'ADDED SUPPORT FOR ROSENKRANZ LM PARAMETERS TO PCQSDHC AND LORENTZ (ver. 1.1.1.0)',
 'FIXED THE TYPEERROR IN ARANGE (ver. 1.1.2.0)',
+'ADDED NEW FUNCTIONAL INTERFACES FOR ALL CROSS-SECTION CALCULATING ROUTINES (ver. 1.2.0.0)',
 ]
 
 # version header
@@ -98,12 +100,22 @@ print('ATTENTION: Python versions of partition sums from TIPS-2017 are now avail
 #print('ATTENTION: Python versions of partition sums from TIPS-2017 are available at http://hitran.org/suppl/TIPS/')
 #print('           To use them in HAPI ver. 1.1.0.7, use partitionFunction parameter of the absorptionCoefficient_ routine.')
 print('')
-print('           It is free to use HAPI. If you use HAPI in your research or software development,')
+print('           MIT license: Copyright 2021 HITRAN team, see more at http://hitran.org. ')
+print('')
+print('           If you use HAPI in your research or software development,')
 print('           please cite it using the following reference:')
 print('           R.V. Kochanov, I.E. Gordon, L.S. Rothman, P. Wcislo, C. Hill, J.S. Wilzewski,')
 print('           HITRAN Application Programming Interface (HAPI): A comprehensive approach')
 print('           to working with spectroscopic data, J. Quant. Spectrosc. Radiat. Transfer 177, 15-30 (2016)')
 print('           DOI: 10.1016/j.jqsrt.2016.03.005')
+print('')
+print('           ATTENTION: This is the core version of the HITRAN Application Programming Interface.')
+print('                      For more efficient implementation of the absorption coefficient routine, ')
+print('                      as well as for new profiles, parameters and other functional,')
+print('                      please consider using HAPI2 extension library.')
+print('                      HAPI2 package is available at http://github.com/hitranonline/hapi2')
+print('')
+
 
 # define precision
 __ComplexType__ = complex128
@@ -133,6 +145,9 @@ if VARIABLES['DEBUG']: warn('DEBUG is set to True!')
 GLOBAL_DEBUG = False
 if GLOBAL_DEBUG: warn('GLOBAL_DEBUG is set to True!')
 
+FLAG_DEBUG_PROFILE = False
+FLAG_DEBUG_LADDER = False
+
 LOCAL_HOST = 'http://localhost'
 
 # DEBUG switch
@@ -156,11 +171,12 @@ VARIABLES['DISPLAY_FETCH_URL'] = False
 # This effect is pronounced only if the step is sufficiently small.
 def arange_(lower,upper,step):
     npnt = floor((upper-lower)/step)+1
+    npnt = int(npnt) # cast to integer to avoid type errors
     upper_new = lower + step*(npnt-1)
     if abs((upper-upper_new)-step) < 1e-10:
         upper_new += step
         npnt += 1    
-    return linspace(lower,upper_new,int(npnt))
+    return linspace(lower,upper_new,npnt)
 
 # ---------------------------------------------------------------
 # ---------------------------------------------------------------
@@ -365,623 +381,192 @@ HITRAN_DEFAULT_HEADER = {
   }
 }
 
-PARAMETER_META_ = \
+#class CaselessDict(dict):                   
+#    def __getitem__(self,key):
+#        return super(CaselessDict,self).__getitem__(key.lower())
+#    def __setitem__(self,key,val):
+#        super(CaselessDict,self).__setitem__(key.lower(),val)
+#    def __contains__(self,key):
+#        return super(CaselessDict,self).__contains__(key.lower())
+#    def has_key(self,key):
+#        return super(CaselessDict,self).has_key(key.lower())
+#    def get(self,key,default=None):
+#        return super(CaselessDict,self).get(key.lower(),default)
+#    def __init__(self,dct=None):
+#        if dct is not None:
+#            for key in dct:
+#                super(CaselessDict,self).__setitem__(key.lower(),dct[key])
+
+class CaseInsensitiveDict(dict):
+    """
+    https://gist.github.com/m000/acbb31b9eca92c1da795 (c) Manolis Stamatogiannakis.
+    """
+    @classmethod
+    def _k(cls, key):
+        return key.lower() if isinstance(key, str) else key
+
+    def __init__(self, *args, **kwargs):
+        super(CaseInsensitiveDict, self).__init__(*args, **kwargs)
+        self._convert_keys()
+    def __getitem__(self, key):
+        return super(CaseInsensitiveDict, self).__getitem__(self.__class__._k(key))
+    def __setitem__(self, key, value):
+        super(CaseInsensitiveDict, self).__setitem__(self.__class__._k(key), value)
+    def __delitem__(self, key):
+        return super(CaseInsensitiveDict, self).__delitem__(self.__class__._k(key))
+    def __contains__(self, key):
+        return super(CaseInsensitiveDict, self).__contains__(self.__class__._k(key))
+    def has_key(self, key):
+        return super(CaseInsensitiveDict, self).has_key(self.__class__._k(key))
+    def pop(self, key, *args, **kwargs):
+        return super(CaseInsensitiveDict, self).pop(self.__class__._k(key), *args, **kwargs)
+    def get(self, key, *args, **kwargs):
+        return super(CaseInsensitiveDict, self).get(self.__class__._k(key), *args, **kwargs)
+    def setdefault(self, key, *args, **kwargs):
+        return super(CaseInsensitiveDict, self).setdefault(self.__class__._k(key), *args, **kwargs)
+    def update(self, E, **F):
+        super(CaseInsensitiveDict, self).update(self.__class__(E))
+        super(CaseInsensitiveDict, self).update(self.__class__(**F))
+    def _convert_keys(self):
+        for k in list(self.keys()):
+            v = super(CaseInsensitiveDict, self).pop(k)
+            self.__setitem__(k, v)
+
+CaselessDict = CaseInsensitiveDict
+            
+PARAMETER_META = CaselessDict(
 {
   "global_iso_id" : {
-    "id" : 1,
-    "name" : "global_iso_id",
-    "name_html" : "Global isotopologue ID",
-    "table_name" : "",
-    "description" : "Unique integer ID of a particular isotopologue: every global isotopologue ID is unique to a particular species, even between different molecules. The number itself is, however arbitrary.",
-    "description_html" : "Unique integer ID of a particular isotopologue: every global isotopologue ID is unique to a particular species, even between different molecules. The number itself is, however arbitrary.",
     "default_fmt" : "%5d",
-    "default_units" : "",
-    "data_type" : "int",
-    "selectable" : 1,
-    "has_reference" : 0,
-    "has_error" : 0
   },
   "molec_id" : {
-    "id" : 2,
-    "name" : "molec_id",
-    "name_html" : "Molecule ID",
-    "table_name" : "",
-    "description" : "The HITRAN integer ID for this molecule in all its isotopologue forms",
-    "description_html" : "The HITRAN integer ID for this molecule in all its isotopologue forms",
     "default_fmt" : "%2d",
-    "default_units" : None,
-    "data_type" : "int",
-    "selectable" : 1,
-    "has_reference" : 0,
-    "has_error" : 0
   },
   "local_iso_id" : {
-    "id" : 3,
-    "name" : "local_iso_id",
-    "name_html" : "Isotopologue ID",
-    "table_name" : "",
-    "description" : "Integer ID of a particular Isotopologue, unique only to a given molecule, in order or abundance (1 = most abundant)",
-    "description_html" : "Integer ID of a particular Isotopologue, unique only to a given molecule, in order or abundance (1 = most abundant)",
     "default_fmt" : "%1d",
-    "default_units" : "",
-    "data_type" : "int",
-    "selectable" : 1,
-    "has_reference" : 0,
-    "has_error" : 0
   },
   "nu" : {
-    "id" : 4,
-    "name" : "nu",
-    "name_html" : "<em>&nu;</em>",
-    "table_name" : "prm_nu",
-    "description" : "Transition wavenumber",
-    "description_html" : "Transition wavenumber",
     "default_fmt" : "%12.6f",
-    "default_units" : "cm-1",
-    "data_type" : "float",
-    "selectable" : 1,
-    "has_reference" : 1,
-    "has_error" : 1
   },
   "sw" : {
-    "id" : 5,
-    "name" : "sw",
-    "name_html" : "<em>S</em>",
-    "table_name" : "prm_sw",
-    "description" : "Line intensity, multiplied by isotopologue abundance, at T = 296 K",
-    "description_html" : "Line intensity, multiplied by isotopologue abundance, at T&nbsp;=&nbsp;296&nbsp;K",
     "default_fmt" : "%10.3e",
-    "default_units" : "cm-1/(molec.cm-2)",
-    "data_type" : "float",
-    "selectable" : 1,
-    "has_reference" : 1,
-    "has_error" : 1
   },
   "a" : {
-    "id" : 6,
-    "name" : "a",
-    "name_html" : "<em>A</em>",
-    "table_name" : "prm_a",
-    "description" : "Einstein A-coefficient in s-1",
-    "description_html" : "Einstein <em>A</em>-coefficient",
     "default_fmt" : "%10.3e",
-    "default_units" : "s-1",
-    "data_type" : "float",
-    "selectable" : 1,
-    "has_reference" : 0,
-    "has_error" : 0
   },
   "gamma_air" : {
-    "id" : 7,
-    "name" : "gamma_air",
-    "name_html" : "<em>&gamma;</em><sub>air</sub>",
-    "table_name" : "prm_gamma_air",
-    "description" : "Air-broadened Lorentzian half-width at half-maximum at p = 1 atm and T = 296 K",
-    "description_html" : "Air-broadened Lorentzian half-width at half-maximum at p&nbsp;=&nbsp;1&nbsp;atm and T&nbsp;=&nbsp;296&nbsp;K",
     "default_fmt" : "%6.4f",
-    "default_units" : "cm-1.atm-1",
-    "data_type" : "float",
-    "selectable" : 1,
-    "has_reference" : 1,
-    "has_error" : 1
   },
   "gamma_self" : {
-    "id" : 8,
-    "name" : "gamma_self",
-    "name_html" : "<em>&gamma;</em><sub>self</sub>",
-    "table_name" : "prm_gamma_self",
-    "description" : "Self-broadened HWHM at 1 atm pressure and 296 K",
-    "description_html" : "Self-broadened HWHM at 1&nbsp;atm pressure and 296&nbsp;K",
     "default_fmt" : "%5.3f",
-    "default_units" : "cm-1.atm-1",
-    "data_type" : "float",
-    "selectable" : 1,
-    "has_reference" : 1,
-    "has_error" : 1
   },
   "n_air" : {
-    "id" : 9,
-    "name" : "n_air",
-    "name_html" : "<em>n</em><sub>air</sub>",
-    "table_name" : "prm_n_air",
-    "description" : "Temperature exponent for the air-broadened HWHM",
-    "description_html" : "Temperature exponent for the air-broadened HWHM",
     "default_fmt" : "%7.4f",
-    "default_units" : "",
-    "data_type" : "float",
-    "selectable" : 1,
-    "has_reference" : 1,
-    "has_error" : 1
   },
   "delta_air" : {
-    "id" : 10,
-    "name" : "delta_air",
-    "name_html" : "<em>&delta;</em><sub>air</sub>",
-    "table_name" : "prm_delta_air",
-    "description" : "Pressure shift induced by air, referred to p=1 atm",
-    "description_html" : "Pressure shift induced by air, referred to <em>p</em>=1&nbsp;atm",
     "default_fmt" : "%9.6f",
-    "default_units" : "cm-1.atm-1",
-    "data_type" : "float",
-    "selectable" : 1,
-    "has_reference" : 1,
-    "has_error" : 1
   },
   "elower" : {
-    "id" : 11,
-    "name" : "elower",
-    "name_html" : "<em>E\"</em>",
-    "table_name" : "",
-    "description" : "Lower-state energy",
-    "description_html" : "Lower-state energy",
     "default_fmt" : "%10.4f",
-    "default_units" : "cm-1",
-    "data_type" : "float",
-    "selectable" : 1,
-    "has_reference" : 0,
-    "has_error" : 0
   },
   "gp" : {
-    "id" : 12,
-    "name" : "gp",
-    "name_html" : "<em>g</em>\'",
-    "table_name" : "",
-    "description" : "Upper state degeneracy",
-    "description_html" : "Upper state degeneracy",
     "default_fmt" : "%5d",
-    "default_units" : "",
-    "data_type" : "int",
-    "selectable" : 1,
-    "has_reference" : 0,
-    "has_error" : 0
   },
   "gpp" : {
-    "id" : 13,
-    "name" : "gpp",
-    "name_html" : "<em>g</em>\"",
-    "table_name" : "",
-    "description" : "Lower state degeneracy",
-    "description_html" : "Lower state degeneracy",
     "default_fmt" : "%5d",
-    "default_units" : "",
-    "data_type" : "int",
-    "selectable" : 1,
-    "has_reference" : 0,
-    "has_error" : 0
   },
   "global_upper_quanta" : {
-    "id" : 14,
-    "name" : "global_upper_quanta",
-    "name_html" : "Global upper quanta",
-    "table_name" : "",
-    "description" : "Electronic and vibrational quantum numbers and labels for the upper state of a transition",
-    "description_html" : "Electronic and vibrational quantum numbers and labels for the upper state of a transition",
     "default_fmt" : "%15s",
-    "default_units" : None,
-    "data_type" : "str",
-    "selectable" : 0,
-    "has_reference" : 0,
-    "has_error" : 0
   },
   "global_lower_quanta" : {
-    "id" : 15,
-    "name" : "global_lower_quanta",
-    "name_html" : "Global lower quanta",
-    "table_name" : "",
-    "description" : "Electronic and vibrational quantum numbers and labels for the lower state of a transition",
-    "description_html" : "Electronic and vibrational quantum numbers and labels for the lower state of a transition",
     "default_fmt" : "%15s",
-    "default_units" : None,
-    "data_type" : "str",
-    "selectable" : 0,
-    "has_reference" : 0,
-    "has_error" : 0
   },
   "local_upper_quanta" : {
-    "id" : 16,
-    "name" : "local_upper_quanta",
-    "name_html" : "Local upper quanta",
-    "table_name" : "",
-    "description" : "Rotational, hyperfine and other quantum numbers and labels for the upper state of a transition",
-    "description_html" : "Rotational, hyperfine and other quantum numbers and labels for the upper state of a transition",
     "default_fmt" : "%15s",
-    "default_units" : None,
-    "data_type" : "str",
-    "selectable" : 0,
-    "has_reference" : 0,
-    "has_error" : 0
   },
   "local_lower_quanta" : {
-    "id" : 17,
-    "name" : "local_lower_quanta",
-    "name_html" : "Local lower quanta",
-    "table_name" : "",
-    "description" : "Rotational, hyperfine and other quantum numbers and labels for the lower state of a transition",
-    "description_html" : "Rotational, hyperfine and other quantum numbers and labels for the lower state of a transition",
     "default_fmt" : "%15s",
-    "default_units" : None,
-    "data_type" : "str",
-    "selectable" : 0,
-    "has_reference" : 0,
-    "has_error" : 0
   },
   "line_mixing_flag" : {
-    "id" : 18,
-    "name" : "line_mixing_flag",
-    "name_html" : "Line mixing flag",
-    "table_name" : "",
-    "description" : "A flag indicating the presence of additional data and code relating to line-mixing",
-    "description_html" : "A flag indicating the presence of additional data and code relating to line-mixing",
     "default_fmt" : "%1s",
-    "default_units" : "",
-    "data_type" : "str",
-    "selectable" : 0,
-    "has_reference" : 0,
-    "has_error" : 0
   },
   "ierr" : {
-    "id" : 19,
-    "name" : "ierr",
-    "name_html" : "Error indices",
-    "table_name" : "",
-    "description" : "Ordered list of indices corresponding to uncertainty estimates of transition parameters",
-    "description_html" : "Ordered list of indices corresponding to uncertainty estimates of transition parameters",
     "default_fmt" : "%s",
-    "default_units" : "",
-    "data_type" : "str",
-    "selectable" : 0,
-    "has_reference" : 0,
-    "has_error" : 0
   },
   "iref" : {
-    "id" : 20,
-    "name" : "iref",
-    "name_html" : "References",
-    "table_name" : "",
-    "description" : "Ordered list of reference identifiers for transition parameters",
-    "description_html" : "Ordered list of reference identifiers for transition parameters",
     "default_fmt" : "%s",
-    "default_units" : None,
-    "data_type" : "str",
-    "selectable" : 0,
-    "has_reference" : 0,
-    "has_error" : 0
   },
   "deltap_air" : {
-    "id" : 21,
-    "name" : "deltap_air",
-    "name_html" : "<em>&delta;\'</em><sub>air</sub>",
-    "table_name" : "prm_deltap_air",
-    "description" : "Linear temperature dependence coefficient for air-induced pressure shift",
-    "description_html" : "Linear temperature dependence coefficient for air-induced pressure shift",
     "default_fmt" : "%10.3e",
-    "default_units" : "",
-    "data_type" : "float",
-    "selectable" : 1,
-    "has_reference" : 1,
-    "has_error" : 1
   },
   "n_self" : {
-    "id" : 22,
-    "name" : "n_self",
-    "name_html" : "<em>n</em><sub>self</sub>",
-    "table_name" : "prm_n_self",
-    "description" : "Temperature exponent for the self-broadened HWHM",
-    "description_html" : "Temperature exponent for the self-broadened HWHM",
     "default_fmt" : "%7.4f",
-    "default_units" : "",
-    "data_type" : "float",
-    "selectable" : 1,
-    "has_reference" : 1,
-    "has_error" : 1
   },
   "delta_self" : {
-    "id" : 23,
-    "name" : "delta_self",
-    "name_html" : "<em>&delta;</em><sub>self</sub>",
-    "table_name" : "prm_delta_self",
-    "description" : "Self-induced pressure shift, referred to p=1 atm",
-    "description_html" : "Self-induced pressure shift, referred to <em>p</em>=1&nbsp;atm",
     "default_fmt" : "%9.6f",
-    "default_units" : "cm-1.atm-1",
-    "data_type" : "float",
-    "selectable" : 1,
-    "has_reference" : 1,
-    "has_error" : 1
   },
   "deltap_self" : {
-    "id" : 24,
-    "name" : "deltap_self",
-    "name_html" : "<em>&delta;\'</em><sub>self</sub>",
-    "table_name" : "prm_deltap_self",
-    "description" : "Linear temperature dependence coefficient for self-induced pressure shift",
-    "description_html" : "Linear temperature dependence coefficient for self-induced pressure shift",
     "default_fmt" : "%10.3e",
-    "default_units" : "",
-    "data_type" : "float",
-    "selectable" : 1,
-    "has_reference" : 1,
-    "has_error" : 1
   },
   "SD_air" : {
-    "id" : 28,
-    "name" : "SD_air",
-    "name_html" : "SD</sub>air</sub>",
-    "table_name" : "prm_sd_air",
-    "description" : "Speed-dependence parameter, air-broadened lines",
-    "description_html" : "Speed-dependence parameter, air-broadened lines",
     "default_fmt" : "%9.6f",
-    "default_units" : "",
-    "data_type" : "float",
-    "selectable" : 1,
-    "has_reference" : 1,
-    "has_error" : 1
   },
   "SD_self" : {
-    "id" : 29,
-    "name" : "SD_self",
-    "name_html" : "SD</sub>self</sub>",
-    "table_name" : "prm_sd_self",
-    "description" : "Speed-dependence parameter, self-broadened lines",
-    "description_html" : "Speed-dependence parameter, self-broadened lines",
     "default_fmt" : "%9.6f",
-    "default_units" : "",
-    "data_type" : "float",
-    "selectable" : 1,
-    "has_reference" : 1,
-    "has_error" : 1
   },
   "beta_g_air" : {
-    "id" : 30,
-    "name" : "beta_g_air",
-    "name_html" : "<em>&beta;</em><sub>G, air</sub>",
-    "table_name" : "prm_beta_g_air",
-    "description" : "Dicke narrowing parameter for the air broadened Galatry line profile",
-    "description_html" : "Dicke narrowing parameter for the air broadened Galatry line profile",
     "default_fmt" : "%9.6f",
-    "default_units" : "",
-    "data_type" : "float",
-    "selectable" : 1,
-    "has_reference" : 1,
-    "has_error" : 1
   },
   "y_self" : {
-    "id" : 31,
-    "name" : "y_self",
-    "name_html" : "<em>Y</em><sub>self</sub>",
-    "table_name" : "prm_y_self",
-    "description" : "First-order (Rosenkranz) line coupling coefficient; self-broadened environment",
-    "description_html" : "First-order (Rosenkranz) line coupling coefficient; self-broadened environment",
     "default_fmt" : "%10.3e",
-    "default_units" : "cm-1.atm-1",
-    "data_type" : "float",
-    "selectable" : 1,
-    "has_reference" : 1,
-    "has_error" : 1
   },
   "y_air" : {
-    "id" : 32,
-    "name" : "y_air",
-    "name_html" : "<em>Y</em><sub>air</sub>",
-    "table_name" : "prm_y_air",
-    "description" : "First-order (Rosenkranz) line coupling coefficient; air-broadened environment",
-    "description_html" : "First-order (Rosenkranz) line coupling coefficient; air-broadened environment",
     "default_fmt" : "%10.3e",
-    "default_units" : "cm-1.atm-1",
-    "data_type" : "float",
-    "selectable" : 1,
-    "has_reference" : 1,
-    "has_error" : 1
   },
   "statep" : {
-    "id" : 33,
-    "name" : "statep",
-    "name_html" : "qns\'",
-    "table_name" : "",
-    "description" : "Upper state quantum numbers",
-    "description_html" : "Upper state quantum numbers",
     "default_fmt" : "%256s",
-    "default_units" : "",
-    "data_type" : "str",
-    "selectable" : 1,
-    "has_reference" : 0,
-    "has_error" : 0
   },
   "statepp" : {
-    "id" : 34,
-    "name" : "statepp",
-    "name_html" : "qns\"",
-    "table_name" : "",
-    "description" : "Lower state quantum numbers",
-    "description_html" : "Lower state quantum numbers",
     "default_fmt" : "%256s",
-    "default_units" : "",
-    "data_type" : "str",
-    "selectable" : 1,
-    "has_reference" : 0,
-    "has_error" : 0
   },
   "beta_g_self" : {
-    "id" : 35,
-    "name" : "beta_g_self",
-    "name_html" : "<em>&beta;</em><sub>G, self</sub>",
-    "table_name" : "prm_beta_g_self",
-    "description" : "Dicke narrowing parameter for the self-broadened Galatry line profile",
-    "description_html" : "Dicke narrowing parameter for the self-broadened Galatry line profile",
     "default_fmt" : "%9.6f",
-    "default_units" : "",
-    "data_type" : "float",
-    "selectable" : 1,
-    "has_reference" : 1,
-    "has_error" : 1
   },
   "trans_id" : {
-    "id" : 36,
-    "name" : "trans_id",
-    "name_html" : "Transition ID",
-    "table_name" : "",
-    "description" : "Unique integer ID of a particular transition entry in the database. (The same physical transition may have different IDs if its parameters have been revised or updated).",
-    "description_html" : "Unique integer ID of a particular transition entry in the database. (The same physical transition may have different IDs if its parameters have been revised or updated).",
     "default_fmt" : "%12d",
-    "default_units" : "",
-    "data_type" : "int",
-    "selectable" : 1,
-    "has_reference" : 0,
-    "has_error" : 0
   },
   "par_line" : {
-    "id" : 37,
-    "name" : "par_line",
-    "name_html" : ".par line",
-    "table_name" : "",
-    "description" : "Native 160-character formatted HITRAN line",
-    "description_html" : "Native 160-character formatted HITRAN line",
     "default_fmt" : "%160s",
-    "default_units" : "",
-    "data_type" : "str",
-    "selectable" : 1,
-    "has_reference" : 0,
-    "has_error" : 0
   },
   "gamma_H2" : {
-    "id" : 38,
-    "name" : "gamma_H2",
-    "name_html" : "<em>&gamma;</em><sub>H2</sub> ",
-    "table_name" : "prm_gamma_H2",
-    "description" : "Lorentzian lineshape HWHM due to pressure broadening by H2 at 1 atm pressure",
-    "description_html" : "Lorentzian lineshape HWHM due to pressure broadening by H<sub>2</sub> at 1&nbsp;atm pressure",
     "default_fmt" : "%6.4f",
-    "default_units" : "cm-1.atm-1",
-    "data_type" : "float",
-    "selectable" : 1,
-    "has_reference" : 1,
-    "has_error" : 1
   },
   "n_H2" : {
-    "id" : 39,
-    "name" : "n_H2",
-    "name_html" : "<em>n</em><sub>H2</sub>",
-    "table_name" : "prm_n_H2",
-    "description" : "Temperature exponent for the H2-broadened HWHM",
-    "description_html" : "Temperature exponent for the H<sub>2</sub>-broadened HWHM",
     "default_fmt" : "%7.4f",
-    "default_units" : "",
-    "data_type" : "float",
-    "selectable" : 1,
-    "has_reference" : 1,
-    "has_error" : 1
   },
   "delta_H2" : {
-    "id" : 40,
-    "name" : "delta_H2",
-    "name_html" : "<em>&delta;</em><sub>H2</sub>",
-    "table_name" : "prm_delta_H2",
-    "description" : "Pressure shift induced by H2, referred to p=1 atm",
-    "description_html" : "Pressure shift induced by H<sub>2</sub>, referred to <em>p</em>=1&nbsp;atm",
     "default_fmt" : "%9.6f",
-    "default_units" : "cm-1.atm-1",
-    "data_type" : "float",
-    "selectable" : 1,
-    "has_reference" : 1,
-    "has_error" : 1
   },
   "deltap_H2" : {
-    "id" : 41,
-    "name" : "deltap_H2",
-    "name_html" : "<em>&delta;\'</em><sub>H2</sub>",
-    "table_name" : "prm_deltap_H2",
-    "description" : "Linear temperature dependence coefficient for H2-induced pressure shift",
-    "description_html" : "Linear temperature dependence coefficient for H<sub>2</sub>-induced pressure shift",
     "default_fmt" : "%10.3e",
-    "default_units" : "",
-    "data_type" : "float",
-    "selectable" : 1,
-    "has_reference" : 1,
-    "has_error" : 1
   },
   "gamma_He": {
-    "id" : 42,
-    "name" : "gamma_He",
-    "name_html" : "<em>&gamma;</em><sub>He</sub> ",
-    "table_name" : "prm_gamma_He",
-    "description" : "Lorentzian lineshape HWHM due to pressure broadening by He at 1 atm pressure",
-    "description_html" : "Lorentzian lineshape HWHM due to pressure broadening by He at 1&nbsp;atm pressure",
     "default_fmt" : "%6.4f",
-    "default_units" : "cm-1.atm-1",
-    "data_type" : "float",
-    "selectable" : 1,
-    "has_reference" : 1,
-    "has_error" : 1
   },
   "n_He" : {
-    "id" : 43,
-    "name" : "n_He",
-    "name_html" : "<em>n</em><sub>He</sub>",
-    "table_name" : "prm_n_He",
-    "description" : "Temperature exponent for the He-broadened HWHM",
-    "description_html" : "Temperature exponent for the He-broadened HWHM",
     "default_fmt" : "%7.4f",
-    "default_units" : "",
-    "data_type" : "float",
-    "selectable" : 1,
-    "has_reference" : 1,
-    "has_error" : 1
   },
   "delta_He" : {
-    "id" : 44,
-    "name" : "delta_He",
-    "name_html" : "<em>&delta;</em><sub>He</sub>",
-    "table_name" : "prm_delta_He",
-    "description" : "Pressure shift induced by He, referred to p=1 atm",
-    "description_html" : "Pressure shift induced by He, referred to <em>p</em>=1&nbsp;atm",
     "default_fmt" : "%9.6f",
-    "default_units" : "cm-1.atm-1",
-    "data_type" : "float",
-    "selectable" : 1,
-    "has_reference" : 1,
-    "has_error" : 1
   },
   "gamma_CO2" : {
-    "id" : 45,
-    "name" : "gamma_CO2",
-    "name_html" : "<em>&gamma;</em><sub>CO2</sub> ",
-    "table_name" : "prm_gamma_CO2",
-    "description" : "Lorentzian lineshape HWHM due to pressure broadening by CO2 at 1 atm pressure",
-    "description_html" : "Lorentzian lineshape HWHM due to pressure broadening by CO<sub>2</sub> at 1&nbsp;atm pressure",
     "default_fmt" : "%6.4f",
-    "default_units" : "cm-1.atm-1",
-    "data_type" : "float",
-    "selectable" : 1,
-    "has_reference" : 1,
-    "has_error" : 1
   },
   "n_CO2" : {
-    "id" : 46,
-    "name" : "n_CO2",
-    "name_html" : "<em>n</em><sub>CO2</sub>",
-    "table_name" : "prm_n_CO2",
-    "description" : "Temperature exponent for the CO2-broadened HWHM",
-    "description_html" : "Temperature exponent for the CO<sub>2</sub>-broadened HWHM",
     "default_fmt" : "%7.4f",
-    "default_units" : "",
-    "data_type" : "float",
-    "selectable" : 1,
-    "has_reference" : 1,
-    "has_error" : 1
   },
   "delta_CO2" : {
-    "id" : 47,
-    "name" : "delta_CO2",
-    "name_html" : "<em>&delta;</em><sub>CO2</sub>",
-    "table_name" : "prm_delta_CO2",
-    "description" : "Pressure shift induced by CO2, referred to p=1 atm",
-    "description_html" : "Pressure shift induced by CO<sub>2</sub>, referred to <em>p</em>=1&nbsp;atm",
     "default_fmt" : "%9.6f",
-    "default_units" : "cm-1.atm-1",
-    "data_type" : "float",
-    "selectable" : 1,
-    "has_reference" : 1,
-    "has_error" : 1
   }, 
   "gamma_HT_0_self_50" : {
     "default_fmt" : "%6.4f",
@@ -1157,18 +742,55 @@ PARAMETER_META_ = \
   "Y_SDV_self_296" : {
     "default_fmt" : "%10.3e",
   },
+  "n_Y_SDV_air_296" : {
+    "default_fmt" : "%6.4e",
+  },
+  "n_Y_SDV_self_296" : {
+    "default_fmt" : "%6.4e",
+  },
   "Y_HT_air_296" : {
     "default_fmt" : "%10.3e",
   },
   "Y_HT_self_296" : {
     "default_fmt" : "%10.3e",
   },
-}
-
-# lower the case of all parameter names (fix for case-sensitive databases)
-PARAMETER_META = {}
-for param in PARAMETER_META_:
-    PARAMETER_META[param.lower()] = PARAMETER_META_[param]
+  "gamma_SDV_0_air_296" : {
+    "default_fmt" : "%6.4f",
+  },
+  "gamma_SDV_0_self_296" : {
+    "default_fmt" : "%6.4f",
+  },
+  "n_SDV_air_296" : {
+    "default_fmt" : "%9.6f",
+  },
+  "n_SDV_self_296" : {
+    "default_fmt" : "%9.6f",
+  },
+  "gamma_SDV_2_air_296" : {
+    "default_fmt" : "%6.4f",
+  },
+  "gamma_SDV_2_self_296" : {
+    "default_fmt" : "%6.4f",
+  },
+  "n_gamma_SDV_2_air_296" : {
+    "default_fmt" : "%6.4f",
+  },
+  "n_gamma_SDV_2_self_296" : {
+    "default_fmt" : "%6.4f",
+  },
+  "delta_SDV_0_air_296" : {
+    "default_fmt" : "%9.6f",
+  },
+  "delta_SDV_0_self_296" : {
+    "default_fmt" : "%9.6f",
+  },
+  "deltap_SDV_air_296" : {
+    "default_fmt" : "%9.6f",
+  },
+  "deltap_SDV_self_296" : {
+    "default_fmt" : "%9.6f",
+  },
+})
 
 def getFullTableAndHeaderName(TableName,ext=None):
     #print('TableName=',TableName)
@@ -1261,6 +883,9 @@ def formatString(par_format,par_value,lang='FORTRAN'):
     # PYTHON RULE: if N is abcent, default value is 6
     regex = FORMAT_PYTHON_REGEX
     (lng,trail,lngpnt,ty) = re.search(regex,par_format).groups()
+    if type(par_value) is np.ma.core.MaskedConstant:
+        result = '%%%ds' % lng % '#'
+        return result
     result = par_format % par_value
     if ty.lower() in set(['f','e']):
        lng = int(lng) if lng else 0
@@ -1362,18 +987,20 @@ def getRowObjectFromString(input_string,TableName):
             regex = '^\%([0-9]+)\.?[0-9]*([dfs])$' #
             regex = FORMAT_PYTHON_REGEX
             (lng,trail,lngpnt,ty) = re.search(regex,par_format).groups()
-            lng = int(lng)
+            lng = int(lng) 
             par_value = csv_chunks[pos]
             if ty=='d': # integer value
                 try:
                     par_value = int(par_value)
-                except:
-                    par_value = 0
+                except ValueError:
+                    #par_value = 0
+                    par_value = np.nan
             elif ty.lower() in set(['e','f']): # float value
                 try:
                     par_value = float(par_value)
-                except:
-                    par_value = 0.0
+                except ValueError:
+                    #par_value = 0.0
+                    par_value = np.nan
             elif ty=='s': # string value
                 pass # don't strip string value
             else:
@@ -1437,7 +1064,7 @@ def storage2cache(TableName,cast=True,ext=None,nlines=None,pos=None):
     #print 'Header:'+str(Header)
     LOCAL_TABLE_CACHE[TableName] = {}
     LOCAL_TABLE_CACHE[TableName]['header'] = Header
-    LOCAL_TABLE_CACHE[TableName]['data'] = {}    
+    LOCAL_TABLE_CACHE[TableName]['data'] = CaselessDict()
     LOCAL_TABLE_CACHE[TableName]['filehandler'] = InfileData
     # Check if Header['order'] and Header['extra'] contain
     #  parameters with same names, raise exception if true.
@@ -1552,6 +1179,26 @@ def storage2cache(TableName,cast=True,ext=None,nlines=None,pos=None):
             #LOCAL_TABLE_CACHE[TableName]['data'][qnt] = col
         header['number_of_rows'] = line_count = (
             len(LOCAL_TABLE_CACHE[TableName]['data'][quantities[0]]))
+            
+    # Convert all columns to numpy arrays
+    par_names = LOCAL_TABLE_CACHE[TableName]['header']['order']
+    if 'extra' in header and header['extra']:
+        par_names += LOCAL_TABLE_CACHE[TableName]['header']['extra']
+    for par_name in par_names:
+        column = LOCAL_TABLE_CACHE[TableName]['data'][par_name]
+        LOCAL_TABLE_CACHE[TableName]['data'][par_name] = np.array(column)                    
+            
+    # Additionally: convert numeric arrays in "extra" part of the LOCAL_TABLE_CACHE to masked arrays.
+    # This is done to avoid "nan" values in the arithmetic operations involving these columns.
+    if 'extra' in header and header['extra']:
+        for par_name in LOCAL_TABLE_CACHE[TableName]['header']['extra']:
+            par_format = LOCAL_TABLE_CACHE[TableName]['header']['extra_format'][par_name]
+            regex = FORMAT_PYTHON_REGEX
+            (lng,trail,lngpnt,ty) = re.search(regex,par_format).groups()
+            if ty.lower() in ['d','e','f']:
+                column = LOCAL_TABLE_CACHE[TableName]['data'][par_name]
+                colmask = np.isnan(column)
+                LOCAL_TABLE_CACHE[TableName]['data'][par_name] = np.ma.array(column,mask=colmask)
     
     # Delete all character-separated values, treat them as column-fixed.
     try:
@@ -2928,6 +2575,67 @@ def mergeParlist(*arg):
     return result
 
 # Define parameter groups to simplify the usage of fetch_
+# "Long term" core version includes templates for the Parlists instead of listing the broadeners explicitly.
+# Each template parameter has '%s' in place of a broadener, i.e. 'gamma_%s' instead of 'gamma_air' 
+
+# ======================================================
+# CODE FOR GENERATING PARAMETER NAMES FOR LINE PROFILES
+# NAME: GENERATE_PARLIST
+# NOTE: THIS CODE DOESN'T COVER NON-PROFILE PARAMETERS 
+#       SUCH AS QUANTA, LOCAL AND GLOBAL IDS ETC...
+# NOTE2: THIS CODE DOESN'T GUARANTEE THAT THE GENERATED
+#        PARAMETER NAMES WILL EXIST IN THE HITRANONLINE 
+#        DATABASE!
+#        TO GET THE REAL PARAMETER NAMES PLEASE EITHER
+#        USE THE EXTENSION OF THE HITRAN APPLICATION
+#        PROGRAMMING INTERFACE:
+#             (http://github.org/hitranonline/hapi2) ...
+#        ... OR LOOK FOR THE CUSTOM USER FORMAT WEB PAGE
+#        ON HITRANONLINE WEBSITE (http://hitran.org).
+# ======================================================
+
+VOIGT_PROFILE_TEMPLATE = ['gamma_%s','n_%s','delta_%s','deltap_%s']
+
+SDVOIGT_PROFILE_TEMPLATE = [
+    'gamma_SDV_0_%s_%d','n_SDV_%s_%d', # HWHM AND ITS T-DEPENDENCE
+    'gamma_SDV_2_%s_%d','n_gamma_SDV_2_%s_%d', # SPEED-DEPENDENCE OF HWHM AND ITS T-DEPENDENCE
+    'delta_SDV_%s_%d','deltap_SDV_%s_%d', # SHIFT AND ITS T-DEPENDENCE
+    'SD_%s' # UNITLESS SDV PARAMETER
+    ]
+
+HT_PROFILE_TEMPLATE = [
+    'gamma_HT_0_%s_%d','n_HT_%s_%d', # HWHM AND ITS T-DEPENDENCE
+    'gamma_HT_2_%s_%d','n_gamma_HT_2_%s_%d', # SPEED-DEPENDENCE OF HWHM AND ITS T-DEPENDENCE
+    'delta_HT_%s_%d','deltap_HT_%s_%d', # SHIFT AND ITS T-DEPENDENCE
+    ]
+
+def apply_env(template,broadener,Tref):
+    args = []
+    if '%s' in template:
+        args.append(broadener)
+    if '%d'  in template:
+        args.append(Tref)
+    return template%tuple(args)
+
+def generate_parlist(profile,broadener,Tref):
+    PROFILE_MAP = {
+        'voigt': VOIGT_PROFILE_TEMPLATE,
+        'vp': VOIGT_PROFILE_TEMPLATE,
+        'sdvoigt': SDVOIGT_PROFILE_TEMPLATE,
+        'sdvp': SDVOIGT_PROFILE_TEMPLATE,
+        'ht': HT_PROFILE_TEMPLATE,
+        'htp': HT_PROFILE_TEMPLATE,
+    }
+    return [apply_env(template,broadener,Tref) \
+        for template in PROFILE_MAP[profile.lower()]] 
+    
+# generate_parlist('Voigt','air',296)  =>   gamma_air,
+    
+# ====================================================================        
+# PARLISTS FOR EACH BROADENER EXPLICITLY (FOR BACKWARDS COMPATIBILITY)
+# ====================================================================        
+
+# Define parameter groups to simplify the usage of fetch_
 PARLIST_DOTPAR = ['par_line',]
 PARLIST_ID = ['trans_id',]
 PARLIST_STANDARD = ['molec_id','local_iso_id','nu','sw','a','elower','gamma_air',
@@ -2941,21 +2649,39 @@ PARLIST_VOIGT_H2 = ['gamma_H2','delta_H2','deltap_H2','n_H2']
 PARLIST_VOIGT_CO2 = ['gamma_CO2','delta_CO2','n_CO2']
 PARLIST_VOIGT_HE = ['gamma_He','delta_He','n_He']
 PARLIST_VOIGT_H2O = ['gamma_H2O','n_H2O']
-PARLIST_VOIGT_LINEMIXING = ['y_air','y_self']
+PARLIST_VOIGT_LINEMIXING_AIR = ['y_air']
+PARLIST_VOIGT_LINEMIXING_SELF = ['y_self']
+PARLIST_VOIGT_LINEMIXING_ALL = mergeParlist(PARLIST_VOIGT_LINEMIXING_AIR,
+                                            PARLIST_VOIGT_LINEMIXING_SELF)
 PARLIST_VOIGT_ALL = mergeParlist(PARLIST_VOIGT_AIR,PARLIST_VOIGT_SELF,
                                  PARLIST_VOIGT_H2,PARLIST_VOIGT_CO2,
                                  PARLIST_VOIGT_HE,PARLIST_VOIGT_H2O,
-                                 PARLIST_VOIGT_LINEMIXING)
+                                 PARLIST_VOIGT_LINEMIXING_ALL)
 
-PARLIST_SDVOIGT_AIR = ['gamma_air','delta_air','deltap_air','n_air','SD_air']
-PARLIST_SDVOIGT_SELF = ['gamma_self','delta_self','deltap_self','n_self','SD_self']
+#PARLIST_SDVOIGT_AIR = ['gamma_air','delta_air','deltap_air','n_air','SD_air']
+#PARLIST_SDVOIGT_AIR = ['gamma_SDV_0_air_296','n_SDV_air_296',
+#                       'gamma_SDV_2_air_296','n_gamma_SDV_2_air_296', # n_SDV_2_air_296 ?
+PARLIST_SDVOIGT_AIR = ['gamma_SDV_0_air_296',  # don't include temperature exponents while they are absent in the database
+                       'gamma_SDV_2_air_296',  # don't include temperature exponents while they are absent in the database
+                       'delta_SDV_0_air_296','deltap_SDV_air_296','SD_air']
+#PARLIST_SDVOIGT_SELF = ['gamma_self','delta_self','deltap_self','n_self','SD_self']
+#PARLIST_SDVOIGT_SELF = ['gamma_SDV_0_self_296','n_SDV_self_296',
+#                       'gamma_SDV_2_self_296','n_gamma_SDV_2_self_296', # n_SDV_2_self_296 ?
+PARLIST_SDVOIGT_SELF = ['gamma_SDV_0_self_296', # don't include temperature exponents while they are absent in the database
+                       'gamma_SDV_2_self_296',  # don't include temperature exponents while they are absent in the database
+                       'delta_SDV_0_self_296','deltap_SDV_self_296','SD_self']
 PARLIST_SDVOIGT_H2 = []
 PARLIST_SDVOIGT_CO2 = []
 PARLIST_SDVOIGT_HE = []
-PARLIST_SDVOIGT_LINEMIXING = ['Y_SDV_air_296','Y_SDV_self_296']
+#PARLIST_SDVOIGT_LINEMIXING_AIR = ['Y_SDV_air_296','n_Y_SDV_air_296']
+PARLIST_SDVOIGT_LINEMIXING_AIR = ['Y_SDV_air_296'] # don't include temperature exponents while they are absent in the database
+#PARLIST_SDVOIGT_LINEMIXING_SELF = ['Y_SDV_self_296','n_Y_SDV_self_296']
+PARLIST_SDVOIGT_LINEMIXING_SELF = ['Y_SDV_self_296'] # don't include temperature exponents while they are absent in the database
+PARLIST_SDVOIGT_LINEMIXING_ALL = mergeParlist(PARLIST_SDVOIGT_LINEMIXING_AIR,
+                                              PARLIST_SDVOIGT_LINEMIXING_SELF)
 PARLIST_SDVOIGT_ALL = mergeParlist(PARLIST_SDVOIGT_AIR,PARLIST_SDVOIGT_SELF,
                                    PARLIST_SDVOIGT_H2,PARLIST_SDVOIGT_CO2,
-                                   PARLIST_SDVOIGT_HE,PARLIST_SDVOIGT_LINEMIXING)
+                                   PARLIST_SDVOIGT_HE,PARLIST_SDVOIGT_LINEMIXING_ALL)
 
 PARLIST_GALATRY_AIR = ['gamma_air','delta_air','deltap_air','n_air','beta_g_air']
 PARLIST_GALATRY_SELF = ['gamma_self','delta_self','deltap_self','n_self','beta_g_self']
@@ -2994,6 +2720,10 @@ PARLIST_ALL = mergeParlist(PARLIST_ID,PARLIST_DOTPAR,PARLIST_STANDARD,
                            PARLIST_SDVOIGT_ALL,PARLIST_GALATRY_ALL,
                            PARLIST_HT_ALL)
 
+# ====================================================================        
+# PARLISTS FOR EACH BROADENER EXPLICITLY (FOR BACKWARDS COMPATIBILITY)
+# ====================================================================        
+                           
 PARAMETER_GROUPS = {
   'par_line' : PARLIST_DOTPAR,
   '160-char' : PARLIST_DOTPAR,
@@ -3008,14 +2738,18 @@ PARAMETER_GROUPS = {
   'voigt_co2' : PARLIST_VOIGT_CO2,
   'voigt_he' : PARLIST_VOIGT_HE,
   'voigt_h2o' : PARLIST_VOIGT_H2O,
-  'voigt_linemixing': PARLIST_VOIGT_LINEMIXING,
+  'voigt_linemixing_air': PARLIST_VOIGT_LINEMIXING_AIR,
+  'voigt_linemixing_self': PARLIST_VOIGT_LINEMIXING_SELF,
+  'voigt_linemixing': PARLIST_VOIGT_LINEMIXING_ALL,
   'voigt' : PARLIST_VOIGT_ALL,
   'sdvoigt_air' : PARLIST_SDVOIGT_AIR,
   'sdvoigt_self' : PARLIST_SDVOIGT_SELF,
   'sdvoigt_h2' : PARLIST_SDVOIGT_H2,
   'sdvoigt_co2' : PARLIST_SDVOIGT_CO2,
   'sdvoigt_he' : PARLIST_SDVOIGT_HE,
-  'sdvoigt_linemixing': PARLIST_SDVOIGT_LINEMIXING,
+  'sdvoigt_linemixing_air': PARLIST_SDVOIGT_LINEMIXING_AIR,
+  'sdvoigt_linemixing_self': PARLIST_SDVOIGT_LINEMIXING_SELF,
+  'sdvoigt_linemixing': PARLIST_SDVOIGT_LINEMIXING_ALL,
   'sdvoigt' : PARLIST_SDVOIGT_ALL,
   'galatry_air' : PARLIST_GALATRY_AIR,
   'galatry_self' : PARLIST_GALATRY_SELF,
@@ -3198,7 +2932,7 @@ ISO_ID = {
      13 : [       2,   7,  '(12C)(18O)2',               0.0000039573,       47.998322,      'CO2'     ],
      14 : [       2,   8,  '(17O)(12C)(18O)',           0.00000147,         46.998291,      'CO2'     ],
     121 : [       2,   9,  '(12C)(17O)2',               0.0000001368,       45.998262,      'CO2'     ],
-     15 : [       2,  10,  '(13C)(18O)2',               0.000000044967,     49.001675,      'CO2'     ],  # 0->11
+     15 : [       2,  10,  '(13C)(18O)2',               0.000000044967,     49.001675,      'CO2'     ],  # 0->10
     120 : [       2,  11,  '(18O)(13C)(17O)',           0.00000001654,      48.00165,       'CO2'     ],  # 'A'->11
     122 : [       2,  12,  '(13C)(17O)2',               0.0000000015375,    47.001618,      'CO2'     ],  # 'B'->12
      16 : [       3,   1,  '(16O)3',                    0.992901,           47.984745,      'O3'      ],
@@ -18007,7 +17741,7 @@ def pcqsdhc(sg0,GamD,Gam0,Gam2,Shift0,Shift2,anuVC,eta,sg,Ylm=0.0):
             Bterm_GLOBAL[index_PART3] = Bterm
             
     # common part
-    # LINE MIXING PART NEEDS FURTHER TESTING, USE WITH CAUTION!!!
+    # LINE MIXING PART NEEDS FURTHER TESTING!!!
     LS_pCqSDHC = (1.0e0/pi) * (Aterm_GLOBAL / (1.0e0 - (anuVC-eta*(c0-1.5e0*c2))*Aterm_GLOBAL + eta*c2*Bterm_GLOBAL))
     return LS_pCqSDHC.real + Ylm*LS_pCqSDHC.imag, LS_pCqSDHC.imag
 
@@ -18017,10 +17751,10 @@ def pcqsdhc(sg0,GamD,Gam0,Gam2,Shift0,Shift2,anuVC,eta,sg,Ylm=0.0):
 
 # set interfaces for profiles
 
-def PROFILE_HT(sg0,GamD,Gam0,Gam2,Shift0,Shift2,anuVC,eta,sg,Ylm=0.0):
+def PROFILE_HT(Nu,GammaD,Gamma0,Gamma2,Delta0,Delta2,NuVC,Eta,WnGrid,YRosen=0.0,Sw=1.0):
     """
     #-------------------------------------------------
-    #      "pCqSDHC": partially-Correlated quadratic-Speed-Dependent Hard-Collision
+    #      "pCqSDHC": partially-Correlated quadratic-Speed-Dependent "Hard-Collision"
     #      Subroutine to Compute the complex normalized spectral shape of an 
     #      isolated line by the pCqSDHC model
     #
@@ -18044,18 +17778,16 @@ def PROFILE_HT(sg0,GamD,Gam0,Gam2,Shift0,Shift2,anuVC,eta,sg,Ylm=0.0):
     #
     #      Input/Output Parameters of Routine (Arguments or Common)
     #      ---------------------------------
-    #      T       : Temperature in Kelvin (Input).
-    #      amM1    : Molar mass of the absorber in g/mol(Input).
-    #      sg0     : Unperturbed line position in cm-1 (Input).
-    #      GamD    : Doppler HWHM in cm-1 (Input)
-    #      Gam0    : Speed-averaged line-width in cm-1 (Input).       
-    #      Gam2    : Speed dependence of the line-width in cm-1 (Input).
-    #      anuVC   : Velocity-changing frequency in cm-1 (Input).
-    #      eta     : Correlation parameter, No unit (Input).
-    #      Shift0  : Speed-averaged line-shift in cm-1 (Input).
-    #      Shift2  : Speed dependence of the line-shift in cm-1 (Input)       
-    #      sg      : Current WaveNumber of the Computation in cm-1 (Input).
-    #      Ylm     : 1st order (Rosenkranz) line mixing coefficients in cm-1 (Input)
+    #      Nu        : Unperturbed line position in cm-1 (Input).
+    #      GammaD    : Doppler HWHM in cm-1 (Input)
+    #      Gamma0    : Speed-averaged line-width in cm-1 (Input).       
+    #      Gamma2    : Speed dependence of the line-width in cm-1 (Input).
+    #      NuVC      : Velocity-changing frequency in cm-1 (Input).
+    #      Eta       : Correlation parameter, No unit (Input).
+    #      Delta0    : Speed-averaged line-shift in cm-1 (Input).
+    #      Delta2    : Speed dependence of the line-shift in cm-1 (Input)       
+    #      WnGrid    : Current WaveNumber of the Computation in cm-1 (Input).
+    #      YRosen    : 1st order (Rosenkranz) line mixing coefficients in cm-1 (Input)
     #
     #      The function has two outputs:
     #      -----------------
@@ -18069,91 +17801,98 @@ def PROFILE_HT(sg0,GamD,Gam0,Gam2,Shift0,Shift2,anuVC,eta,sg,Ylm=0.0):
     #
     #-------------------------------------------------
     """
-    return pcqsdhc(sg0,GamD,Gam0,Gam2,Shift0,Shift2,anuVC,eta,sg,Ylm)
+    return Sw*pcqsdhc(Nu,GammaD,Gamma0,Gamma2,Delta0,Delta2,NuVC,Eta,WnGrid,YRosen)[0]
 
 PROFILE_HTP = PROFILE_HT # stub for backwards compatibility
 
-def PROFILE_SDRAUTIAN(sg0,GamD,Gam0,Gam2,Shift0,Shift2,anuVC,sg,Ylm=0.0):
+def PROFILE_SDRAUTIAN(Nu,GammaD,Gamma0,Gamma2,Delta0,Delta2,NuVC,WnGrid,YRosen=0.0,Sw=1.0):
     """
     # Speed dependent Rautian profile based on HTP.
     # Input parameters:
-    #      sg0     : Unperturbed line position in cm-1 (Input).
-    #      GamD    : Doppler HWHM in cm-1 (Input)
-    #      Gam0    : Speed-averaged line-width in cm-1 (Input).       
-    #      Gam2    : Speed dependence of the line-width in cm-1 (Input).
-    #      anuVC   : Velocity-changing frequency in cm-1 (Input).
-    #      Shift0  : Speed-averaged line-shift in cm-1 (Input).
-    #      Shift2  : Speed dependence of the line-shift in cm-1 (Input)       
-    #      sg      : Current WaveNumber of the Computation in cm-1 (Input).
-    #      Ylm     : 1st order (Rosenkranz) line mixing coefficients in cm-1 (Input)
+    #      Nu        : Unperturbed line position in cm-1 (Input).
+    #      GammaD    : Doppler HWHM in cm-1 (Input)
+    #      Gamma0    : Speed-averaged line-width in cm-1 (Input).       
+    #      Gamma2    : Speed dependence of the line-width in cm-1 (Input).
+    #      NuVC      : Velocity-changing frequency in cm-1 (Input).
+    #      Delta0    : Speed-averaged line-shift in cm-1 (Input).
+    #      Delta2    : Speed dependence of the line-shift in cm-1 (Input)       
+    #      WnGrid    : Current WaveNumber of the Computation in cm-1 (Input).
+    #      YRosen    : 1st order (Rosenkranz) line mixing coefficients in cm-1 (Input)
     """
-    return pcqsdhc(sg0,GamD,Gam0,Gam2,Shift0,Shift2,anuVC,cZero,sg,Ylm)
+    return Sw*pcqsdhc(Nu,GammaD,Gamma0,Gamma2,Delta0,Delta2,NuVC,cZero,WnGrid,YRosen)[0]
 
-def PROFILE_RAUTIAN(sg0,GamD,Gam0,Shift0,anuVC,eta,sg,Ylm=0.0):
+def PROFILE_RAUTIAN(Nu,GammaD,Gamma0,Delta0,NuVC,WnGrid,Ylm=0.0,Sw=1.0):
     """
     # Rautian profile based on HTP.
     # Input parameters:
-    #      sg0     : Unperturbed line position in cm-1 (Input).
-    #      GamD    : Doppler HWHM in cm-1 (Input)
-    #      Gam0    : Speed-averaged line-width in cm-1 (Input).       
-    #      anuVC   : Velocity-changing frequency in cm-1 (Input).
-    #      Shift0  : Speed-averaged line-shift in cm-1 (Input).
-    #      sg      : Current WaveNumber of the Computation in cm-1 (Input).
-    #      Ylm     : 1st order (Rosenkranz) line mixing coefficients in cm-1 (Input)
+    #      Nu        : Unperturbed line position in cm-1 (Input).
+    #      GammaD    : Doppler HWHM in cm-1 (Input)
+    #      Gamma0    : Speed-averaged line-width in cm-1 (Input).       
+    #      NuVC      : Velocity-changing frequency in cm-1 (Input).
+    #      Delta0    : Speed-averaged line-shift in cm-1 (Input).
+    #      WnGrid    : Current WaveNumber of the Computation in cm-1 (Input).
+    #      YRosen    : 1st order (Rosenkranz) line mixing coefficients in cm-1 (Input)
     """
-    return pcqsdhc(sg0,GamD,Gam0,cZero,Shift0,cZero,anuVC,cZero,sg,Ylm)
+    return Sw*pcqsdhc(Nu,GammaD,Gamma0,cZero,Delta0,cZero,NuVC,cZero,WnGrid,YRosen)[0]
 
-def PROFILE_SDVOIGT(sg0,GamD,Gam0,Gam2,Shift0,Shift2,sg,Ylm=0.0):
+def PROFILE_SDVOIGT(Nu,GammaD,Gamma0,Gamma2,Delta0,Delta2,WnGrid,YRosen=0.0,Sw=1.0):
     """
     # Speed dependent Voigt profile based on HTP.
     # Input parameters:
-    #      sg0     : Unperturbed line position in cm-1 (Input).
-    #      GamD    : Doppler HWHM in cm-1 (Input)
-    #      Gam0    : Speed-averaged line-width in cm-1 (Input).       
-    #      Gam2    : Speed dependence of the line-width in cm-1 (Input).
-    #      Shift0  : Speed-averaged line-shift in cm-1 (Input).
-    #      Shift2  : Speed dependence of the line-shift in cm-1 (Input)       
-    #      sg      : Current WaveNumber of the Computation in cm-1 (Input).
-    #      Ylm     : 1st order (Rosenkranz) line mixing coefficients in cm-1 (Input)
+    #      Nu        : Unperturbed line position in cm-1 (Input).
+    #      GammaD    : Doppler HWHM in cm-1 (Input)
+    #      Gamma0    : Speed-averaged line-width in cm-1 (Input).       
+    #      Gamma2    : Speed dependence of the line-width in cm-1 (Input).
+    #      Delta0    : Speed-averaged line-shift in cm-1 (Input).
+    #      Delta2    : Speed dependence of the line-shift in cm-1 (Input)       
+    #      WnGrid    : Current WaveNumber of the Computation in cm-1 (Input).
+    #      YRosen    : 1st order (Rosenkranz) line mixing coefficients in cm-1 (Input)
     """
-    return pcqsdhc(sg0,GamD,Gam0,Gam2,Shift0,Shift2,cZero,cZero,sg,Ylm)
+    if FLAG_DEBUG_PROFILE: 
+        print('PROFILE_SDVOIGT>>>',Nu,GammaD,Gamma0,Gamma2,Delta0,Delta2,WnGrid,YRosen,Sw)
+    return Sw*pcqsdhc(Nu,GammaD,Gamma0,Gamma2,Delta0,Delta2,cZero,cZero,WnGrid,YRosen)[0]
     
-def PROFILE_VOIGT(sg0,GamD,Gam0,sg,Ylm=0.0):
+def PROFILE_VOIGT(Nu,GammaD,Gamma0,Delta0,WnGrid,YRosen=0.0,Sw=1.0):
     """
     # Voigt profile based on HTP.
     # Input parameters:
-    #   sg0  : Unperturbed line position in cm-1 (Input).
-    #   GamD : Doppler HWHM in cm-1 (Input)
-    #   Gam0 : Speed-averaged line-width in cm-1 (Input).       
-    #   sg   : Current WaveNumber of the Computation in cm-1 (Input).
-    #   Ylm  : 1st order (Rosenkranz) line mixing coefficients in cm-1 (Input)
+    #      Nu        : Unperturbed line position in cm-1 (Input).
+    #      GammaD    : Doppler HWHM in cm-1 (Input)
+    #      Gamma0    : Speed-averaged line-width in cm-1 (Input).       
+    #      Delta0    : Speed-averaged line-shift in cm-1 (Input).
+    #      WnGrid    : Current WaveNumber of the Computation in cm-1 (Input).
+    #      YRosen    : 1st order (Rosenkranz) line mixing coefficients in cm-1 (Input)
     """
-    return PROFILE_HTP(sg0,GamD,Gam0,cZero,cZero,cZero,cZero,cZero,sg,Ylm)
+    #return PROFILE_HTP(Nu,GammaD,Gamma0,cZero,cZero,cZero,cZero,cZero,WnGrid,YRosen)[0]
+    if FLAG_DEBUG_PROFILE: 
+        print('PROFILE_VOIGT>>>',Nu,GammaD,Gamma0,Delta0,WnGrid,YRosen,Sw)
+    return Sw*pcqsdhc(Nu,GammaD,Gamma0,cZero,Delta0,cZero,cZero,cZero,WnGrid,YRosen)[0]
 
-def PROFILE_LORENTZ(sg0,Gam0,sg,Ylm=0.0):
+def PROFILE_LORENTZ(Nu,Gamma0,Delta0,WnGrid,YRosen=0.0,Sw=1.0):
     """
     # Lorentz profile.
     # Input parameters:
-    #   sg0  : Unperturbed line position in cm-1 (Input).
-    #   Gam0 : Speed-averaged line-width in cm-1 (Input).       
-    #   sg   : Current WaveNumber of the Computation in cm-1 (Input).
-    #   Ylm  : 1st order (Rosenkranz) line mixing coefficients in cm-1 (Input)
+    #      Nu        : Unperturbed line position in cm-1 (Input).
+    #      Gamma0    : Speed-averaged line-width in cm-1 (Input).
+    #      Delta0    : Speed-averaged line-shift in cm-1 (Input).
+    #      WnGrid    : Current WaveNumber of the Computation in cm-1 (Input).
+    #      YRosen    : 1st order (Rosenkranz) line mixing coefficients in cm-1 (Input)
     """
-    # reduce the extra calculations in the case if Ylm is zero:
-    if Ylm==0.0:
-        return Gam0/(pi*(Gam0**2+(sg-sg0)**2))
+    # reduce the extra calculations in the case if YRosen is zero:
+    if YRosen==0.0:
+        return Sw*Gamma0/(pi*(Gamma0**2+(WnGrid+Delta0-Nu)**2))
     else:
-        return (Gam0+Ylm*(sg-sg0))/(pi*(Gam0**2+(sg-sg0)**2))
+        return Sw*(Gamma0+YRosen*(WnGrid+Delta0-Nu))/(pi*(Gamma0**2+(WnGrid+Delta0-Nu)**2))
 
-def PROFILE_DOPPLER(sg0,GamD,sg):
+def PROFILE_DOPPLER(Nu,GammaD,WnGrid,Sw=1.0):
     """
     # Doppler profile.
     # Input parameters:
-    #   sg0: Unperturbed line position in cm-1 (Input).
-    #   GamD: Doppler HWHM in cm-1 (Input)
-    #   sg: Current WaveNumber of the Computation in cm-1 (Input).
+    #      Nu        : Unperturbed line position in cm-1 (Input).
+    #      GammaD    : Doppler HWHM in cm-1 (Input)
+    #      WnGrid    : Current WaveNumber of the Computation in cm-1 (Input).
     """
-    return cSqrtLn2divSqrtPi*exp(-cLn2*((sg-sg0)/GamD)**2)/GamD
+    return Sw*cSqrtLn2divSqrtPi*exp(-cLn2*((WnGrid-Nu)/GammaD)**2)/GammaD
 
 # Volume concentration of all gas molecules at the pressure p and temperature T
 def volumeConcentration(p,T):
@@ -18161,7 +17900,1102 @@ def volumeConcentration(p,T):
 
 # ------------------------------- PARAMETER DEPENDENCIES --------------------------------
 
-# temperature dependence for intencities (HITRAN)
+# THE LOGIC OF THIS SECTION IS THAT NOTHING (OR AT LEAST MINUMUM) SHOULD BE HARD-CODED INTO THE GENERIC ABSCOEF ROUTINES
+# TRYING TO AVOID THE OBJECT ORIENTED APPROACH HERE IN ORDER TO CORRESPOND TO THE OVERALL STYLE OF THE PACKAGE
+
+def ladder(parname,species,envdep_presets,TRANS,flag_exception=False): # priority search for the parameters
+    INFO = {}  
+    if FLAG_DEBUG_LADDER: print('\nladder>>> ======================')
+    if FLAG_DEBUG_LADDER: print('ladder>>> Calculating %s for %s broadener'%(parname,species))
+    if FLAG_DEBUG_LADDER: print('ladder>>> Envdep presets: ',envdep_presets)
+    for profile,envdep in envdep_presets:
+        try:
+            if FLAG_DEBUG_LADDER: print('\nladder>>> Trying: ',profile,envdep)
+            INFO,ARGS = PRESSURE_INDUCED_ENVDEP[profile][parname][envdep]['getargs'](species,TRANS)
+            parval_species = PRESSURE_INDUCED_ENVDEP[profile][parname][envdep]['depfunc'](**ARGS)
+            if FLAG_DEBUG_LADDER: print('ladder>>> success!\n')
+            return INFO,parval_species
+        #except KeyError as e:
+        except Exception as e:
+            if flag_exception:
+                raise e
+            else:
+                INFO['status'] = e.__class__.__name__+': '+str(e)
+                if FLAG_DEBUG_LADDER: print('ladder>>>',e.__class__.__name__+': '+str(e),': ',parname,profile,envdep)
+    if FLAG_DEBUG_LADDER: print('ladder>>> ')
+    return INFO,0
+
+def calculate_parameter_PI(parname,envdep_presets,TRANS,CALC_INFO):
+    """
+    Default function for calculating the pressure-induced parameters.
+    Use this function only if the final lineshape parameter needs summation
+    over the mixture/diluent components.
+    """
+    parval = 0
+    Diluent = TRANS['Diluent']
+    calc_info_flag = False
+    if type(CALC_INFO) is dict:
+        calc_info_flag = True
+        CALC_INFO[parname] = {'mixture':{}}
+    for species in Diluent:
+        abun = Diluent[species]
+        INFO,parval_species = ladder(parname,species,envdep_presets,TRANS)
+        parval += abun*parval_species
+        if calc_info_flag: 
+            CALC_INFO[parname]['mixture'][species] = {'args':INFO,'value':parval_species}
+    if calc_info_flag: 
+        CALC_INFO[parname]['status'] = 'ok'
+        CALC_INFO[parname]['value'] = parval
+    return parval
+
+def calculate_parameter_Nu(dummy,TRANS,CALC_INFO=None):
+    nu = TRANS['nu']
+    if type(CALC_INFO) is dict: 
+        CALC_INFO['GammaD'] = {'value':nu,'mixture':{'generic':{'args':{}}}}
+    return nu
+
+def calculate_parameter_Sw(dummy,TRANS,CALC_INFO=None):
+    molec_id = TRANS['molec_id']
+    local_iso_id = TRANS['local_iso_id']
+    nu = TRANS['nu']
+    sw = TRANS['sw']
+    T = TRANS['T']
+    Tref = TRANS['T_ref']
+    SigmaT = TRANS['SigmaT']
+    SigmaTref = TRANS['SigmaT_ref']
+    elower = TRANS['elower']
+    Sw_calc = EnvironmentDependency_Intensity(sw,T,Tref,SigmaT,SigmaTref,elower,nu)
+    if 'Abundances' in TRANS:
+        Sw_calc *= TRANS['Abundances'][(molec_id,local_iso_id)]/abundance(molec_id,local_iso_id)
+    if type(CALC_INFO) is dict:
+        CALC_INFO['Sw'] = {
+            'value':Sw_calc,
+            'mixture':{
+                'generic': {
+                    'args': {
+                        'SigmaT':{'value':SigmaT,'source':'<calc>'},
+                        'SigmaT_ref':{'value':SigmaTref,'source':'<calc>'},
+                        'elower':{'value':elower,'source':'elower'},
+                        'nu':{'value':nu,'source':'nu'},
+                    }
+                }
+            }
+        }
+
+    return Sw_calc
+    #return {'value':TRANS['sw'],'info':{}} # SHOULD BE REDONE TO INCLUDE THE ABUNDANCES OF RADIATIVELY ACTIVE SPECIES
+    
+def calculate_parameter_GammaD(dummy,TRANS,CALC_INFO=None):
+    """
+    Calculate Doppler broadening HWHM for given environment.
+    """
+    Diluent = TRANS['Diluent']
+    T = TRANS['T']
+    p = TRANS['p']
+    MoleculeNumberDB = TRANS['molec_id']
+    IsoNumberDB = TRANS['local_iso_id']
+    LineCenterDB = TRANS['nu']
+    cMassMol = 1.66053873e-27
+    molmass = molecularMass(MoleculeNumberDB,IsoNumberDB)
+    fSqrtMass = sqrt(molmass)
+    cc_ = 2.99792458e8
+    cBolts_ = 1.3806503e-23
+    
+    #GammaD = (cSqrt2Ln2/cc_)*sqrt(cBolts_/cMassMol)*sqrt(T) * LineCenterDB/fSqrtMass
+    # OR 
+    m = molmass * cMassMol * 1000
+    GammaD = sqrt(2*cBolts*T*log(2)/m/cc**2)*LineCenterDB
+    
+    if type(CALC_INFO) is dict: 
+        CALC_INFO['GammaD'] = {
+            'value':GammaD,
+            'mixture':{
+                'generic':{
+                    'args':{
+                        'T': {'value':T},
+                        'p': {'value':p},
+                        'molmass': {'value':molmass,'source':'<calc>'}
+                    }
+                }
+            }
+        }
+    return GammaD
+    
+def calculate_parameter_Gamma0(envdep_presets,TRANS,CALC_INFO=None):
+    """
+    Calculate pressure-induced broadening HWHM for given Environment and TRANS.
+    """
+    parname = 'Gamma0'
+    return calculate_parameter_PI(parname,envdep_presets,TRANS,CALC_INFO)
+
+def calculate_parameter_Delta0(envdep_presets,TRANS,CALC_INFO=None):
+    """
+    Calculate pressure-induced line shift for given Environment and TRANS.
+    """
+    parname = 'Delta0'
+    return calculate_parameter_PI(parname,envdep_presets,TRANS,CALC_INFO)
+
+def calculate_parameter_Gamma2(envdep_presets,TRANS,CALC_INFO=None):
+    """
+    Calculate speed dependence of pressure-induced broadening HWHM for given Environment and TRANS.
+    """
+    parname = 'Gamma2'
+    return calculate_parameter_PI(parname,envdep_presets,TRANS,CALC_INFO)
+
+def calculate_parameter_Delta2(envdep_presets,TRANS,CALC_INFO=None):
+    """
+    Calculate speed dependence of pressure-induced line shift for given Environment and TRANS.
+    """
+    parname = 'Delta2'
+    return calculate_parameter_PI(parname,envdep_presets,TRANS,CALC_INFO)
+
+def calculate_parameter_Eta(envdep_presets,TRANS,CALC_INFO=None):
+    """
+    Calculate correlation parameter for given Environment and TRANS.
+    """
+    Diluent = TRANS['Diluent']
+    if type(CALC_INFO) is not dict:
+        return 0
+    CALC_INFO['Eta'] = {'mixture':{}}
+    Eta = 0
+    Gamma2 = CALC_INFO['Gamma2']['value']
+    Delta2 = CALC_INFO['Delta2']['value']
+    Eta_denom = Gamma2-1j*Delta2
+    for species in Diluent:
+        abun = Diluent[species]
+        EtaDB = TRANS.get('eta_HT_%s'%species,0)
+        Gamma2T = CALC_INFO['Gamma2']['mixture'][species]['value']
+        Delta2T = CALC_INFO['Delta2']['mixture'][species]['value']
+        Eta_species = EtaDB*abun*(Gamma2T-1j*Delta2T)
+        if Eta_denom!=0: Eta_species/=Eta_denom
+        CALC_INFO['Eta']['mixture'][species] = {
+            'value':Eta_species,
+            'args':{
+                'Gamma0':{'value':Gamma0,'source':'<calc>'},
+                'Delta0':{'value':Delta0,'source':'<calc>'},
+            }
+        }
+        Eta += Eta_species
+    return Eta
+
+def calculate_parameter_NuVC(envdep_presets,TRANS,CALC_INFO=None):
+    """
+    Calculate velocity collision frequency for given Environment and TRANS.
+    """
+    Diluent = TRANS['Diluent']
+    if type(CALC_INFO) is not dict:
+        return 0
+    CALC_INFO['NuVC'] = {'mixture':{}}
+    Gamma0 = CALC_INFO['Gamma0']['value']
+    Delta0 = CALC_INFO['Delta0']['value']
+    Eta = CALC_INFO['Eta']['value']
+    NuVC = Eta*(Gamma0-1j*Shift0)
+    p = TRANS['p']
+    T = TRANS['T']
+    Tref = CALC_INFO['Tref']['value']
+    for species in Diluent:
+
+        abun = Diluent[species]
+
+        # 1st NuVC component: weighted sum of NuVC_i
+        NuVCDB = TRANS.get('nu_HT_%s'%species,0)
+        KappaDB = TRANS.get('kappa_HT_%s'%species,0)
+        NuVC += NuVCDB*(Tref/T)**KappaDB*p
+
+        # 2nd NuVC component (with negative sign)
+        Gamma0T = CALC_INFO['Gamma0']['mixture'][species]['value']
+        Delta0T = CALC_INFO['Delta0']['mixture'][species]['value']
+        EtaDB = TRANS.get('eta_HT_%s'%species,0)
+        NuVC -= EtaDB*abun*(Gamma0T-1j*Delta0T)
+
+        CALC_INFO['NuVC']['mixture'][species] = {
+            'value':NuVC_species,
+            'args':{
+                'Gamma0':{'value':Gamma0,'source':'<calc>'},
+                'Delta0':{'value':Delta0,'source':'<calc>'},
+            }
+        }
+
+        NuVC += NuVC_species
+
+    return NuVC
+    
+def calculate_parameter_YRosen(envdep_presets,TRANS,CALC_INFO=None):
+    """
+    Calculate pressure-induced 1st order line mixing parameter for given Environment and TRANS.
+    """
+    parname = 'YRosen'
+    return calculate_parameter_PI(parname,envdep_presets,TRANS,CALC_INFO)
+    
+def calculateProfileParameters(envdep_presets,parameters,TRANS,CALC_INFO=None,exclude=None):
+    """
+    Get the Line context on the input, and return the dictionary with the "abstract" parameters.
+    """
+    PARAMS = {}
+    for pname,pfunc in parameters:
+        if exclude and pname in exclude:
+            pval_default = 0
+            PARAMS[pname] = pval_default # don't calculate parameter if it is present in exclude set
+            if type(CALC_INFO) is dict:
+                CALC_INFO[pname] = {
+                    'value': pval_default,
+                    'status': 'excluded'
+                }
+        else:
+            PARAMS[pname] = pfunc(envdep_presets,TRANS=TRANS,CALC_INFO=CALC_INFO)
+    return PARAMS
+    
+def calculateProfileParametersDoppler(TRANS,CALC_INFO=None,exclude=None):
+    """
+    Get values for abstract profile parameters for Doppler profile.
+    """
+    envdep_presets = [('Doppler','default')]
+    parameters = [
+        ('Nu', calculate_parameter_Nu),
+        ('Sw', calculate_parameter_Sw),
+        ('GammaD', calculate_parameter_GammaD),
+    ]
+    return calculateProfileParameters(envdep_presets,parameters,CALC_INFO=CALC_INFO,TRANS=TRANS,exclude=exclude)
+    
+def calculateProfileParametersLorentz(TRANS,CALC_INFO=None,exclude=None):
+    """
+    Get values for abstract profile parameters for Lorentz profile.
+    """
+    envdep_presets = [('Lorentz','default')]
+    parameters = [
+        ('Nu', calculate_parameter_Nu),
+        ('Sw', calculate_parameter_Sw),
+        ('Gamma0', calculate_parameter_Gamma0),
+        ('Delta0', calculate_parameter_Delta0),
+        ('YRosen', calculate_parameter_YRosen),
+    ]
+    return calculateProfileParameters(envdep_presets,parameters,CALC_INFO=CALC_INFO,TRANS=TRANS,exclude=exclude)
+    
+def calculateProfileParametersVoigt(TRANS,CALC_INFO=None,exclude=None):
+    """
+    Get values for abstract profile parameters for Voigt profile.
+    """
+    envdep_presets = [('Voigt','default')]
+    parameters = [
+        ('Nu', calculate_parameter_Nu),
+        ('Sw', calculate_parameter_Sw),
+        ('GammaD', calculate_parameter_GammaD),
+        ('Gamma0', calculate_parameter_Gamma0),
+        ('Delta0', calculate_parameter_Delta0),
+        ('YRosen', calculate_parameter_YRosen),
+    ]
+    return calculateProfileParameters(envdep_presets,parameters,CALC_INFO=CALC_INFO,TRANS=TRANS,exclude=exclude)
+
+def calculateProfileParametersSDVoigt(TRANS,CALC_INFO=None,exclude=None):
+    """
+    Get values for abstract profile parameters for SDVoigt profile.
+    """
+    envdep_presets = [
+        ('SDVoigt','default'),
+        ('SDVoigt','dimensionless'),
+        ('Voigt','default')
+        ]
+    parameters = [
+        ('Nu', calculate_parameter_Nu),
+        ('Sw', calculate_parameter_Sw),
+        ('GammaD', calculate_parameter_GammaD),
+        ('Gamma0', calculate_parameter_Gamma0),
+        ('Delta0', calculate_parameter_Delta0),
+        ('Gamma2', calculate_parameter_Gamma2),
+        ('Delta2', calculate_parameter_Delta2),
+        ('YRosen', calculate_parameter_YRosen),        
+    ]
+    return calculateProfileParameters(envdep_presets,parameters,CALC_INFO=CALC_INFO,TRANS=TRANS,exclude=exclude)
+
+def calculateProfileParametersHT(TRANS,CALC_INFO=None,exclude=None):
+    """
+    Get values for abstract profile parameters for HT profile.
+    """
+    envdep_presets = [
+        ('HT','multitemp'),
+        ('HT','default'),
+        ('Voigt','default')
+        ]
+    parameters = [
+        ('Nu', calculate_parameter_Nu),
+        ('Sw', calculate_parameter_Sw),
+        ('GammaD', calculate_parameter_GammaD),
+        ('Gamma0', calculate_parameter_Gamma0),
+        ('Delta0', calculate_parameter_Delta0),
+        ('Gamma2', calculate_parameter_Gamma2),
+        ('Delta2', calculate_parameter_Delta2),
+        ('Eta', calculate_parameter_Eta),
+        ('NuVC', calculate_parameter_NuVC),
+        ('YRosen', calculate_parameter_YRosen),
+    ]
+    return calculateProfileParameters(envdep_presets,parameters,CALC_INFO=CALC_INFO,TRANS=TRANS,exclude=exclude)
+    
+def calculateProfileParametersFullPriority(TRANS,CALC_INFO=None,exclude=None):
+    """
+    Get the Line context on the input, and return the dictionary with the "abstract" parameters.
+    """
+    envdep_presets = [
+        ('HT','multitemp'),
+        ('HT','default'),
+        ('SDVoigt','default'),
+        ('Voigt','default')
+        ]
+    parameters = [
+        ('Nu', calculate_parameter_Nu),
+        ('Sw', calculate_parameter_Sw),
+        ('GammaD', calculate_parameter_GammaD),
+        ('Gamma0', calculate_parameter_Gamma0),
+        ('Delta0', calculate_parameter_Delta0),
+        ('Gamma2', calculate_parameter_Gamma2),
+        ('Delta2', calculate_parameter_Delta2),
+        ('Eta', calculate_parameter_Eta),
+        ('NuVC', calculate_parameter_NuVC),
+        ('YRosen', calculate_parameter_YRosen),
+    ]
+    return calculateProfileParameters(envdep_presets,parameters,CALC_INFO=CALC_INFO,TRANS=TRANS,exclude=exclude)
+
+VARIABLES['abscoef_debug'] = True
+
+# \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+# ENVIRONMENT DEPENDENCES (GENERIC)
+
+def environGetArguments(abstract_parnames,lookup_cases,
+        aux_args,TRANS):
+    """
+    Get the environment-dependent parameter names, along with auxiliary arguments 
+    to use in the environment dependence function.
+    INPUT:
+        abstract_args: tuple containing the names of the abstract parameters 
+                       for the environment dependence
+        lookup_cases: list of dicts, each of which corresponds to the
+                       mapping of abstract parname to particular value in the database.
+                       The search goes accordingly to the 
+                       order of the cases in the list, of none found then
+                       the Exception is raised.
+    OUTPUT:
+        INFO: database names for some of the "abstract" arguments
+                  for the environment dependence
+        ARGS: values for the "abstract" arguments
+    """    
+    params_not_found = []
+    
+    for CASE in lookup_cases:
+        
+        casename = CASE['__case__']
+    
+        ARGS = aux_args
+        INFO = {}
+        
+        flag = False
+        for argname_abstract in set(CASE.keys())-set(['__case__']):
+           
+            argname_database = CASE[argname_abstract]['name']
+            
+            try:
+                if argname_database not in TRANS or TRANS[argname_database] is np.ma.core.MaskedConstant:
+                    if 'default' in CASE[argname_abstract]:
+                        source = '<default>'
+                        value = CASE[argname_abstract]['default']
+                    else:
+                        raise KeyError                    
+                else:
+                    source = argname_database
+                    value = TRANS[argname_database]
+                ARGS[argname_abstract] = value                   
+                if VARIABLES['abscoef_debug']: 
+                    INFO[argname_abstract]={'case':casename}
+                    INFO[argname_abstract]['source'] = source
+                    INFO[argname_abstract]['value'] = value
+            except KeyError:                
+                params_not_found.append(argname_database)
+                flag = True
+                
+        if not flag: 
+            return INFO,ARGS
+        
+    raise Exception('not found in DB: %s'%params_not_found)
+
+# STANDARD ENVIRONMENT DEPENDENCE FUNCTIONS    
+    
+def environDependenceFn_PowerLaw(Par_ref,TempRatioPower,T,T_ref,p,p_ref):
+    """
+    Standard single power law environment dependence.
+    """
+    return Par_ref * ( T_ref/T )**TempRatioPower * p/p_ref
+    
+def environDependenceFn_LinearLaw(Par_ref,Coef,T,T_ref,p,p_ref):
+    """
+    Standard linear law environment dependence.    
+    """ 
+    return ( Par_ref + Coef*(T-T_ref) ) * p/p_ref
+    
+# ENVIRONMENT DEPENDENCES FOR LORENTZ PROFILE    
+    
+# Gamma0 =>
+    
+def environGetArguments_Lorentz_Gamma0_default(broadener,TRANS):
+    """
+    Argument selector for the environment dependence function for Gamma0.
+    """
+    T_ref = 296.0; p_ref = 1.0
+    abstract_args = ['Par_ref','TempRatioPower']
+    lookup_cases = [
+        {
+            '__case__': 'Lorentz 1',
+            'Par_ref':{
+                'name': 'gamma_%s'%broadener,                
+            },
+            'TempRatioPower':{
+                'name': 'n_%s'%broadener,
+            },
+        },
+        {
+            '__case__': 'Lorentz 2',
+            'Par_ref':{
+                'name': 'gamma_%s'%broadener,
+            },
+            'TempRatioPower':{
+                'name': 'n_air',
+            },
+        },
+    ]
+    aux_args = {'T':TRANS['T'],'T_ref':T_ref,'p':TRANS['p'],'p_ref':p_ref}
+    CALC_INFO,ARGS = environGetArguments(abstract_args,
+        lookup_cases,aux_args,TRANS)        
+    return CALC_INFO,ARGS
+    
+# Delta0 =>    
+    
+def environGetArguments_Lorentz_Delta0_default(broadener,TRANS):
+    """
+    Argument selector for the environment dependence function for Delta0.
+    """
+    T_ref = 296.0; p_ref = 1.0
+    abstract_args = ['Par_ref','Coef']
+    lookup_cases = [
+        {
+            '__case__': 'Lorentz 1',
+            'Par_ref':{
+                'name': 'delta_%s'%broadener,
+                'default': 0,
+            },
+            'Coef':{
+                'name': 'deltap_%s'%broadener,
+                'default': 0,
+            },
+        },
+    ]
+    aux_args = {'T':TRANS['T'],'T_ref':T_ref,'p':TRANS['p'],'p_ref':p_ref}
+    CALC_INFO,ARGS = environGetArguments(abstract_args,
+        lookup_cases,aux_args,TRANS)        
+    return CALC_INFO,ARGS
+
+# YRosen =>
+
+def environGetArguments_Lorentz_YRosen_default(broadener,TRANS):
+    """
+    Argument selector for the environment dependence function for YRosen.
+    """
+    T_ref = 296.0; p_ref = 1.0
+    abstract_args = ['Par_ref','TempRatioPower']
+    lookup_cases = [
+        {
+            '__case__': 'Lorentz 1',
+            'Par_ref':{
+                'name': 'y_%s'%broadener,  
+                'default': 0,
+            },
+            'TempRatioPower':{
+                'name': 'n_y_%s'%broadener,
+                'default': 0,
+            },
+        },
+    ]
+    aux_args = {'T':TRANS['T'],'T_ref':T_ref,'p':TRANS['p'],'p_ref':p_ref}
+    CALC_INFO,ARGS = environGetArguments(abstract_args,
+        lookup_cases,aux_args,TRANS)        
+    return CALC_INFO,ARGS
+        
+# ENVIRONMENT DEPENDENCES FOR VOIGT PROFILE
+    
+# ... Gamma0, Delta0, and YRosen are the same as for Lorentz profile
+
+# ENVIRONMENT DEPENDENCES FOR SDVOIGT PROFILE
+
+# Gamma0 =>
+    
+def environGetArguments_SDVoigt_Gamma0_default(broadener,TRANS):
+    """
+    Argument selector for the environment dependence function for Gamma0.
+    """
+    T_ref = 296.0; p_ref = 1.0
+    abstract_args = ['Par_ref','TempRatioPower']
+    lookup_cases = [
+        {
+            '__case__': 'SDVoigt 1',
+            'Par_ref':{
+                'name': 'gamma_SDV_0_%s_%d'%(broadener,T_ref),
+            },
+            'TempRatioPower':{
+                'name': 'n_SDV_%s_%d'%(broadener,T_ref),
+                'default': 0,
+            },
+        },
+    ]
+    aux_args = {'T':TRANS['T'],'T_ref':T_ref,'p':TRANS['p'],'p_ref':p_ref}
+    CALC_INFO,ARGS = environGetArguments(abstract_args,
+        lookup_cases,aux_args,TRANS)        
+    return CALC_INFO,ARGS
+    
+# Delta0 =>
+        
+def environGetArguments_SDVoigt_Delta0_default(broadener,TRANS):
+    """
+    Argument selector for the environment dependence function for Delta0.
+    """
+    T_ref = 296.0; p_ref = 1.0
+    abstract_args = ['Par_ref','Coef']
+    lookup_cases = [
+        {
+            '__case__': 'SDVoigt 1',
+            'Par_ref':{
+                'name': 'delta_SDV_0_%s_%d'%(broadener,T_ref),
+            },
+            'Coef':{
+                'name': 'deltap_SDV_%s_%d'%(broadener,T_ref),
+            },
+        },
+    ]
+    aux_args = {'T':TRANS['T'],'T_ref':T_ref,'p':TRANS['p'],'p_ref':p_ref}
+    CALC_INFO,ARGS = environGetArguments(abstract_args,
+        lookup_cases,aux_args,TRANS)        
+    return CALC_INFO,ARGS
+
+# Gamma2 =>
+    
+def environGetArguments_SDVoigt_Gamma2_default(broadener,TRANS):
+    """
+    Argument selector for the environment dependence function for Gamma2.
+    """
+    T_ref = 296.0; p_ref = 1.0
+    abstract_args = ['Par_ref','TempRatioPower']
+    lookup_cases = [
+        {
+            '__case__': 'SDVoigt 1',
+            'Par_ref':{
+                'name': 'gamma_SDV_2_%s_%d'%(broadener,T_ref),
+            },
+            'TempRatioPower':{
+                'name': 'n_gamma_SDV_2_%s_%d'%(broadener,T_ref),
+                'default': 0,
+            },
+        },
+    ]
+    aux_args = {'T':TRANS['T'],'T_ref':T_ref,'p':TRANS['p'],'p_ref':p_ref}
+    CALC_INFO,ARGS = environGetArguments(abstract_args,
+        lookup_cases,aux_args,TRANS)        
+    return CALC_INFO,ARGS
+
+def environGetArguments_SDVoigt_Gamma2_dimensionless(broadener,TRANS): # avoid this;
+    """
+    Argument selector for the environment dependence function for Gamma2.
+    """
+    T_ref = 296.0; p_ref = 1.0
+    abstract_args = ['gamma0','sd','n']
+    lookup_cases = [
+        {
+            '__case__': 'SDVoigt 1',
+            'gamma0':{
+                'name': 'gamma_%s'%broadener,
+            },
+            'sd':{
+                'name': 'SD_%s'%broadener,
+            },
+            'n':{
+                'name': 'n_SD_%s'%broadener,
+                'default': 0,
+            },
+        },
+        {
+            '__case__': 'SDVoigt 2',
+            'gamma0':{
+                'name': 'gamma_%s'%broadener,
+            },
+            'sd':{
+                'name': 'SD_%s'%broadener,
+            },
+            'n':{
+                'name': 'n_SD_air',
+                'default': 0,
+            },
+        },
+    ]
+    aux_args = {'T':TRANS['T'],'T_ref':T_ref,'p':TRANS['p'],'p_ref':p_ref}
+    CALC_INFO,ARGS = environGetArguments(abstract_args,
+        lookup_cases,aux_args,TRANS)        
+    return CALC_INFO,ARGS
+        
+# Delta2 =>    
+    
+def environGetArguments_SDVoigt_Delta2_default(broadener,TRANS):
+    """
+    Argument selector for the environment dependence function for Delta0.
+    """
+    T_ref = 296.0; p_ref = 1.0
+    abstract_args = ['Par_ref','Coef']
+    lookup_cases = [
+        {
+            '__case__': 'SDVoigt 1',
+            'Par_ref':{
+                'name': 'delta_SDV_2_%s_%d'%(broadener,T_ref),
+                'default': 0,
+            },
+            'Coef':{
+                'name': 'deltap_SDV_2_%s_%d'%(broadener,T_ref),
+                'default': 0,
+            },
+        },
+    ]
+    aux_args = {'T':TRANS['T'],'T_ref':T_ref,'p':TRANS['p'],'p_ref':p_ref}
+    CALC_INFO,ARGS = environGetArguments(abstract_args,
+        lookup_cases,aux_args,TRANS)        
+    return CALC_INFO,ARGS
+
+# YRosen =>
+
+def environGetArguments_SDVoigt_YRosen_default(broadener,TRANS):
+    """
+    Argument selector for the environment dependence function for YRosen.
+    """
+    T_ref = 296.0; p_ref = 1.0
+    abstract_args = ['Par_ref','TempRatioPower']
+    lookup_cases = [
+        {
+            '__case__': 'Lorentz 1',
+            'Par_ref':{
+                'name': 'Y_SDV_%s_%d'%(broadener,T_ref),
+                'default': 0,
+            },
+            'TempRatioPower':{
+                'name': 'n_Y_SDV_%s_%d'%(broadener,T_ref),
+                'default': 0,
+            },
+        },
+    ]
+    aux_args = {'T':TRANS['T'],'T_ref':T_ref,'p':TRANS['p'],'p_ref':p_ref}
+    CALC_INFO,ARGS = environGetArguments(abstract_args,
+        lookup_cases,aux_args,TRANS)        
+    return CALC_INFO,ARGS
+    
+# ENVIRONMENT DEPENDENCES FOR HT PROFILE
+
+# Gamma0 =>
+
+def get_T_ref_for_HT_multitemp(T):
+    """
+    Get the actual reference temperature for the multitemp HT preset.
+    """
+    TRanges = [(0,100),(100,200),(200,400),(400,float('inf'))]
+    Trefs = [50.,150.,296.,700.]
+    for TRange,TrefHT in zip(TRanges,Trefs):
+        if T >= TRange[0] and T < TRange[1]:
+            break
+    return TrefHT
+    
+def environGetArguments_HT_Gamma0_default(broadener,TRANS):
+    """
+    Argument selector for the environment dependence function for Gamma0.
+    """
+    T_ref = 296.0; p_ref = 1.0
+    abstract_args = ['Par_ref','TempRatioPower']
+    lookup_cases = [
+        {
+            '__case__': 'HT 1',
+            'Par_ref':{
+                'name': 'gamma_HT_0_%s_%d'%(broadener,T_ref),
+            },
+            'TempRatioPower':{
+                'name': 'n_HT_%s_%d'%(broadener,T_ref),
+                'default': 0,
+            },
+        },
+    ]
+    aux_args = {'T':TRANS['T'],'T_ref':T_ref,'p':TRANS['p'],'p_ref':p_ref}
+    CALC_INFO,ARGS = environGetArguments(abstract_args,
+        lookup_cases,aux_args,TRANS)        
+    return CALC_INFO,ARGS
+    
+def environGetArguments_HT_Gamma0_multitemp(broadener,TRANS): # CUSTOM MULTITEMP PRESET
+    """
+    Argument selector for the environment dependence function for Gamma0.
+    Search parameters for non-standard "Multi-temperature" environment dependence
+    used in HITRAN for H2 molecule, as described in Wcislo et al., JQSRT 2016.
+    """
+    T_ref = get_T_ref_for_HT_multitemp(TRANS['T']); p_ref = 1.0
+    abstract_args = ['Par_ref','TempRatioPower']
+    lookup_cases = [
+        {
+            '__case__': 'HT 1',
+            'Par_ref':{
+                'name': 'gamma_HT_0_%s_%d'%(broadener,T_ref),
+            },
+            'TempRatioPower':{
+                'name': 'n_HT_%s_%d'%(broadener,T_ref),
+                'default': 0,
+            },
+        },
+    ]
+    aux_args = {'T':TRANS['T'],'T_ref':T_ref,'p':TRANS['p'],'p_ref':p_ref}
+    CALC_INFO,ARGS = environGetArguments(abstract_args,
+        lookup_cases,aux_args,TRANS)        
+    return CALC_INFO,ARGS
+    
+# Delta0 =>
+        
+def environGetArguments_HT_Delta0_default(broadener,TRANS):
+    """
+    Argument selector for the environment dependence function for Delta0.
+    """
+    T_ref = 296.0; p_ref = 1.0
+    abstract_args = ['Par_ref','Coef']
+    lookup_cases = [
+        {
+            '__case__': 'HT 1',
+            'Par_ref':{
+                'name': 'delta_HT_0_%s_%d'%(broadener,T_ref),
+            },
+            'Coef':{
+                'name': 'deltap_HT_%s_%d'%(broadener,T_ref),
+            },
+        },
+    ]
+    aux_args = {'T':TRANS['T'],'T_ref':T_ref,'p':TRANS['p'],'p_ref':p_ref}
+    CALC_INFO,ARGS = environGetArguments(abstract_args,
+        lookup_cases,aux_args,TRANS)
+    return CALC_INFO,ARGS
+
+def environGetArguments_HT_Delta0_multitemp(broadener,TRANS): # CUSTOM MULTITEMP PRESET
+    """
+    Argument selector for the environment dependence function for Delta0.
+    Search parameters for non-standard "Multi-temperature" environment dependence
+    used in HITRAN for H2 molecule, as described in Wcislo et al., JQSRT 2016.
+    """
+    T_ref = get_T_ref_for_HT_multitemp(TRANS['T']); p_ref = 1.0
+    abstract_args = ['Par_ref','Coef']
+    lookup_cases = [
+        {
+            '__case__': 'HT 1',
+            'Par_ref':{
+                'name': 'delta_HT_0_%s_%d'%(broadener,T_ref),
+            },
+            'Coef':{
+                'name': 'deltap_HT_%s_%d'%(broadener,T_ref),
+            },
+        },
+    ]
+    aux_args = {'T':TRANS['T'],'T_ref':T_ref,'p':TRANS['p'],'p_ref':p_ref}
+    CALC_INFO,ARGS = environGetArguments(abstract_args,
+        lookup_cases,aux_args,TRANS)
+    return CALC_INFO,ARGS
+    
+# Gamma2 =>
+    
+def environGetArguments_HT_Gamma2_default(broadener,TRANS):
+    """
+    Argument selector for the environment dependence function for Gamma2.
+    """
+    T_ref = 296.0; p_ref = 1.0
+    abstract_args = ['Par_ref','TempRatioPower']
+    lookup_cases = [
+        {
+            '__case__': 'HT 1',
+            'Par_ref':{
+                'name': 'gamma_HT_2_%s_%d'%(broadener,T_ref),
+            },
+            'TempRatioPower':{
+                'name': 'n_gamma_HT_2_%s_%d'%(broadener,T_ref),
+                'default': 0,
+            },
+        },
+    ]
+    aux_args = {'T':TRANS['T'],'T_ref':T_ref,'p':TRANS['p'],'p_ref':p_ref}
+    CALC_INFO,ARGS = environGetArguments(abstract_args,
+        lookup_cases,aux_args,TRANS)
+    return CALC_INFO,ARGS
+
+def environGetArguments_HT_Gamma2_multitemp(broadener,TRANS): # CUSTOM MULTITEMP PRESET
+    """
+    Argument selector for the environment dependence function for Gamma2.
+    Search parameters for non-standard "Multi-temperature" environment dependence
+    used in HITRAN for H2 molecule, as described in Wcislo et al., JQSRT 2016.
+    """
+    T_ref = get_T_ref_for_HT_multitemp(TRANS['T']); p_ref = 1.0
+    abstract_args = ['Par_ref','TempRatioPower']
+    lookup_cases = [
+        {
+            '__case__': 'HT 1',
+            'Par_ref':{
+                'name': 'gamma_HT_2_%s_%d'%(broadener,T_ref),
+            },
+            'TempRatioPower':{
+                'name': 'n_gamma_HT_2_%s_%d'%(broadener,T_ref),
+                'default': 0,
+            },
+        },
+    ]
+    aux_args = {'T':TRANS['T'],'T_ref':T_ref,'p':TRANS['p'],'p_ref':p_ref}
+    CALC_INFO,ARGS = environGetArguments(abstract_args,
+        lookup_cases,aux_args,TRANS)
+    return CALC_INFO,ARGS
+    
+# Delta2 =>    
+    
+def environGetArguments_HT_Delta2_default(broadener,TRANS):
+    """
+    Argument selector for the environment dependence function for Delta0.
+    """
+    T_ref = 296.0; p_ref = 1.0
+    abstract_args = ['Par_ref','Coef']
+    lookup_cases = [
+        {
+            '__case__': 'HT 1',
+            'Par_ref':{
+                'name': 'delta_HT_2_%s_%d'%(broadener,T_ref),
+                'default': 0,
+            },
+            'Coef':{
+                'name': 'deltap_HT_2_%s_%d'%(broadener,T_ref),
+                'default': 0,
+            },
+        },
+    ]
+    aux_args = {'T':TRANS['T'],'T_ref':T_ref,'p':TRANS['p'],'p_ref':p_ref}
+    CALC_INFO,ARGS = environGetArguments(abstract_args,
+        lookup_cases,aux_args,TRANS)        
+    return CALC_INFO,ARGS
+
+def environGetArguments_HT_Delta2_multitemp(broadener,TRANS): # CUSTOM MULTITEMP PRESET
+    """
+    Argument selector for the environment dependence function for Delta0.
+    Search parameters for non-standard "Multi-temperature" environment dependence
+    used in HITRAN for H2 molecule, as described in Wcislo et al., JQSRT 2016.
+    """
+    T_ref = get_T_ref_for_HT_multitemp(TRANS['T']); p_ref = 1.0
+    abstract_args = ['Par_ref','Coef']
+    lookup_cases = [
+        {
+            '__case__': 'HT 1',
+            'Par_ref':{
+                'name': 'delta_HT_2_%s_%d'%(broadener,T_ref),
+                'default': 0,
+            },
+            'Coef':{
+                'name': 'deltap_HT_2_%s_%d'%(broadener,T_ref),
+                'default': 0,
+            },
+        },
+    ]
+    aux_args = {'T':TRANS['T'],'T_ref':T_ref,'p':TRANS['p'],'p_ref':p_ref}
+    CALC_INFO,ARGS = environGetArguments(abstract_args,
+        lookup_cases,aux_args,TRANS)        
+    return CALC_INFO,ARGS
+    
+# NuVC =>    
+    
+def environGetArguments_HT_NuVC_default(broadener,TRANS):
+    """
+    Argument selector for the environment dependence function for NuVC.
+    """
+    T_ref = 296.0; p_ref = 1.0
+    abstract_args = ['Par_ref','TempRatioPower']
+    lookup_cases = [
+        {
+            '__case__': 'HT 1',
+            'Par_ref':{
+                'name': 'nu_HT_%s'%broadener,
+            },
+            'TempRatioPower':{
+                'name': 'kappa_HT_%s'%broadener,
+                'default': 0,
+            },
+        },
+    ]
+    aux_args = {'T':TRANS['T'],'T_ref':T_ref,'p':TRANS['p'],'p_ref':p_ref}
+    CALC_INFO,ARGS = environGetArguments(abstract_args,
+        lookup_cases,aux_args,TRANS)
+    return CALC_INFO,ARGS
+    
+# YRosen =>
+
+def environGetArguments_HT_YRosen_default(broadener,TRANS):
+    """
+    Argument selector for the environment dependence function for YRosen.
+    """
+    T_ref = 296.0; p_ref = 1.0
+    abstract_args = ['Par_ref','TempRatioPower']
+    lookup_cases = [
+        {
+            '__case__': 'Lorentz 1',
+            'Par_ref':{
+                'name': 'Y_HT_%s_%d'%(broadener,T_ref),
+                'default': 0,
+            },
+            'TempRatioPower':{
+                'name': 'n_Y_HT_%s_%d'%(broadener,T_ref),
+                'default': 0,
+            },
+        },
+    ]
+    aux_args = {'T':TRANS['T'],'T_ref':T_ref,'p':TRANS['p'],'p_ref':p_ref}
+    CALC_INFO,ARGS = environGetArguments(abstract_args,
+        lookup_cases,aux_args,TRANS)        
+    return CALC_INFO,ARGS
+    
+# //////////////////////////////////////////////////////////////////////
+# REGISTRY FOR ENVIRONMENT DEPENDENCES FOR PRESSURE-INDUCED PARAMETERS 
+PRESSURE_INDUCED_ENVDEP = {
+
+    'Lorentz': {
+        'Gamma0': { # name of the abstract parameter
+            'default': { # name of the preset
+                'getargs': environGetArguments_Lorentz_Gamma0_default, # convert abstract environment dependence arguments to the real database parameters
+                'depfunc': environDependenceFn_PowerLaw, # calculate the environment-dependent parameter            
+            },
+        },
+        'Delta0': {    
+            'default': {
+                'getargs': environGetArguments_Lorentz_Delta0_default,
+                'depfunc': environDependenceFn_LinearLaw, 
+            },
+        },
+        'YRosen': {    
+            'default': {
+                'getargs': environGetArguments_Lorentz_YRosen_default,
+                'depfunc': environDependenceFn_LinearLaw, 
+            },
+        },
+    },
+    
+    'Voigt': {
+        'Gamma0': {
+            'default': {
+                'getargs': environGetArguments_Lorentz_Gamma0_default,
+                'depfunc': environDependenceFn_PowerLaw,
+            },
+        },
+        'Delta0': {    
+            'default': {
+                'getargs': environGetArguments_Lorentz_Delta0_default,
+                'depfunc': environDependenceFn_LinearLaw, 
+            },
+        },
+        'YRosen': {    
+            'default': {
+                'getargs': environGetArguments_Lorentz_YRosen_default,
+                'depfunc': environDependenceFn_PowerLaw, 
+            },
+        },
+    },
+
+    'SDVoigt': {
+        'Gamma0': {
+            'default': {
+                'getargs': environGetArguments_SDVoigt_Gamma0_default,
+                'depfunc': environDependenceFn_PowerLaw,
+            },
+        },
+        'Delta0': {    
+            'default': {
+                'getargs': environGetArguments_SDVoigt_Delta0_default,
+                'depfunc': environDependenceFn_LinearLaw, 
+            },
+        },
+        'Gamma2': {
+            'default': {
+                'getargs': environGetArguments_SDVoigt_Gamma2_default,
+                'depfunc': environDependenceFn_PowerLaw,
+            },
+            'dimensionless': {
+                'getargs': environGetArguments_SDVoigt_Gamma2_dimensionless,
+                'depfunc': lambda gamma0,sd,n,T,T_ref,p,p_ref: environDependenceFn_PowerLaw(gamma0*sd,n,T,T_ref,p,p_ref),
+            },
+        },
+        'Delta2': {    
+            'default': {
+                'getargs': environGetArguments_SDVoigt_Delta2_default,
+                'depfunc': environDependenceFn_LinearLaw, 
+            },
+        },
+        'YRosen': {    
+            'default': {
+                'getargs': environGetArguments_SDVoigt_YRosen_default,
+                'depfunc': environDependenceFn_PowerLaw, 
+            },
+        },
+    },
+    
+    'HT': {
+        'Gamma0': {
+            'default': {
+                'getargs': environGetArguments_HT_Gamma0_default,
+                'depfunc': environDependenceFn_PowerLaw,
+            },
+            'multitemp': {
+                'getargs': environGetArguments_HT_Gamma0_multitemp,
+                'depfunc': environDependenceFn_PowerLaw,
+            },
+        },
+        'Delta0': {    
+            'default': {
+                'getargs': environGetArguments_HT_Delta0_default,
+                'depfunc': environDependenceFn_LinearLaw, 
+            },
+            'multitemp': {
+                'getargs': environGetArguments_HT_Delta0_multitemp,
+                'depfunc': environDependenceFn_LinearLaw, 
+            },
+        },
+        'Gamma2': {
+            'default': {
+                'getargs': environGetArguments_HT_Gamma2_default,
+                'depfunc': environDependenceFn_PowerLaw,
+            },
+            'multitemp': {
+                'getargs': environGetArguments_HT_Gamma2_multitemp,
+                'depfunc': environDependenceFn_PowerLaw,
+            },
+        },
+        'Delta2': {
+            'default': {
+                'getargs': environGetArguments_HT_Delta2_default,
+                'depfunc': environDependenceFn_LinearLaw, 
+            },
+            'multitemp': {
+                'getargs': environGetArguments_HT_Delta2_multitemp,
+                'depfunc': environDependenceFn_LinearLaw, 
+            },
+        },
+        'NuVC': {    
+            'default': {
+                'getargs': environGetArguments_HT_NuVC_default,
+                'depfunc': environDependenceFn_PowerLaw, 
+            },
+        },
+        'YRosen': {    
+            'default': {
+                'getargs': environGetArguments_HT_YRosen_default,
+                'depfunc': environDependenceFn_PowerLaw, 
+            },
+        },
+    },
+    
+}
+
+# ////////////////////////////////////////////
+
+# OLD TEMPERATURE AND PRESSURE DEPENDENCES MOSTLY FOR BACKWARDS COMPATIBILITY
+
+# temperature dependence for intensities (HITRAN)
 def EnvironmentDependency_Intensity(LineIntensityRef,T,Tref,SigmaT,SigmaTref,
                                     LowerStateEnergy,LineCenter):
     const = __FloatType__(1.4388028496642257)
@@ -18170,7 +19004,7 @@ def EnvironmentDependency_Intensity(LineIntensityRef,T,Tref,SigmaT,SigmaTref,
     LineIntensity = LineIntensityRef*SigmaTref/SigmaT*ch/zn
     return LineIntensity
 
-# environmental dependence for GammaD (HTP, Voigt)    # Tref/T ????
+# environmental dependence for GammaD (HTP, Voigt)
 def EnvironmentDependency_GammaD(GammaD_ref,T,Tref):
     # Doppler parameters do not depend on pressure!
     return GammaD_ref*sqrt(T/Tref)
@@ -18182,19 +19016,32 @@ def EnvironmentDependency_Gamma0(Gamma0_ref,T,Tref,p,pref,TempRatioPower):
 # environmental dependence for Gamma2 (HTP)
 def EnvironmentDependency_Gamma2(Gamma2_ref,T,Tref,p,pref,TempRatioPower):
     return Gamma2_ref*p/pref*(Tref/T)**TempRatioPower
+    #return Gamma2_ref*p/pref
 
 # environmental dependence for Delta0 (HTP)
-def EnvironmentDependency_Delta0(Delta0_ref,p,pref):
-    return Delta0_ref*p/pref
+def EnvironmentDependency_Delta0(Delta0_ref,Deltap,T,Tref,p,pref):
+    return (Delta0_ref + Deltap*(T-Tref))*p/pref
 
 # environmental dependence for Delta2 (HTP)
-def EnvironmentDependency_Delta2(Delta2_ref,p,pref):
-    return Delta2_ref*p/pref
+def EnvironmentDependency_Delta2(Delta2_ref,T,Tref,p,pref,TempRatioPower):
+    return Delta2_ref*p/pref*(Tref/T)**TempRatioPower
+    #return Delta2_ref*p/pref
 
-# environmental dependence for anuVC (HTP)
-def EnvironmentDependency_anuVC(anuVC_ref,T,Tref,p,pref):
-    return anuVC_ref*Tref/T*p/pref
+# environmental dependence for nuVC (HTP)
+def EnvironmentDependency_nuVC(nuVC_ref,Kappa,T,Tref,p,pref):
+    return nuVC_ref*(Tref/T)**Kappa*p/pref
 
+# environmental dependence for nuVC (HTP)
+def EnvironmentDependency_Eta(EtaDB,Gamma0,Shift0,Diluent,C):  # C=>CONTEXT
+    Eta_Numer = 0
+    for species in Diluent:
+        abun = Diluent[species]
+        Gamma0T = C['Gamma0T_%s'%species]
+        Shift0T = C['Shift0T_%s'%species]
+        Eta_Numer += EtaDB*abun*(Gamma0T+1j*Shift0T)
+    Eta = Eta_Numer / (Gamma0 + 1j*Shift0)    
+    return Eta
+    
 # ------------------------------- /PARAMETER DEPENDENCIES --------------------------------
 
 # ------------------------------- BINGINGS --------------------------------
@@ -18262,47 +19109,11 @@ def getDefaultValuesForXsect(Components,SourceTables,Environment,OmegaRange,
     if OmegaWing == None:
         OmegaWing = 0.0 # cm-1
     if not Format:
-        """
-        Infinitesimal = 1e-14 # put this to header in next version!
-        min_number_of_digits = 4 # minimal number of digits after dec. pnt.
-        last_digit_pos = 0
-        while modf(OmegaStep * 10**last_digit_pos)[0] > Infinitesimal:
-            last_digit_pos += 1
-        actual_number_of_digits = max(min_number_of_digits,last_digit_pos)
-        Format = '%%.%df %%e' % actual_number_of_digits
-        """
         Format = '%.12f %e'
     return Components,SourceTables,Environment,OmegaRange,\
            OmegaStep,OmegaWing,IntensityThreshold,Format
 
-
-# save numpy arrays to file
-# arrays must have same dimensions
-def save_to_file(fname,fformat,*arg):
-    f = open(fname,'w')
-    for i in range(len(arg[0])):
-        argline = []
-        for j in range(len(arg)):
-            argline.append(arg[j][i])
-        f.write((fformat+'\n') % tuple(argline))
-    f.close()
-
-# ==========================================================================================
-# =========================== NEW ABSORPTION COEFFICIENT ===================================
-# ==========================================================================================
-
-
-
-
-def absorptionCoefficient_HT(Components=None,SourceTables=None,partitionFunction=PYTIPS2017,
-                                Environment=None,OmegaRange=None,OmegaStep=None,OmegaWing=None,
-                                IntensityThreshold=DefaultIntensityThreshold,
-                                OmegaWingHW=DefaultOmegaWingHW,
-                                GammaL='gamma_air', HITRAN_units=True, LineShift=True,
-                                File=None, Format=None, OmegaGrid=None,
-                                WavenumberRange=None,WavenumberStep=None,WavenumberWing=None,
-                                WavenumberWingHW=None,WavenumberGrid=None,
-                                Diluent={},EnvDependences=None,LineMixingRosen=False):
+ABSCOEF_DOCSTRING_TEMPLATE = \
     """
     INPUT PARAMETERS: 
         Components:  list of tuples [(M,I,D)], where
@@ -18314,13 +19125,13 @@ def absorptionCoefficient_HT(Components=None,SourceTables=None,partitionFunction
         Environment:  dictionary containing thermodynamic parameters.
                         'p' - pressure in atmospheres,
                         'T' - temperature in Kelvin
-                        Default={'p':1.,'T':296.}
+                        Default={{'p':1.,'T':296.}}
         WavenumberRange:  wavenumber range to consider.
         WavenumberStep:   wavenumber step to consider. 
         WavenumberWing:   absolute wing for calculating a lineshape (in cm-1) 
         WavenumberWingHW:  relative wing for calculating a lineshape (in halfwidths)
         IntensityThreshold:  threshold for intensities
-        GammaL:  specifies broadening parameter ('gamma_air' or 'gamma_self')
+        Diluent:  specifies broadening mixture composition, e.g. {{'air':0.7,'self':0.3}}
         HITRAN_units:  use cm2/molecule (True) or cm-1 (False) for absorption coefficient
         File:   write output to file (if specified)
         Format:  c-format of file output (accounts for significant digits in WavenumberStep)
@@ -18330,7 +19141,7 @@ def absorptionCoefficient_HT(Components=None,SourceTables=None,partitionFunction
         Xsect: absorption coefficient calculated on the grid
     ---
     DESCRIPTION:
-        Calculate absorption coefficient using HT profile.
+        Calculate absorption coefficient using {profile}.
         Absorption coefficient is calculated at arbitrary temperature and pressure.
         User can vary a wide range of parameters to control a process of calculation.
         The choise of these parameters depends on properties of a particular linelist.
@@ -18339,14 +19150,34 @@ def absorptionCoefficient_HT(Components=None,SourceTables=None,partitionFunction
         user should use a trial and error method.
     ---
     EXAMPLE OF USAGE:
-        nu,coef = absorptionCoefficient_HT(((2,1),),'co2',WavenumberStep=0.01,
-                                              HITRAN_units=False,GammaL='gamma_self')
+        {usage_example}
     ---
-    """
+    """     
+           
+def absorptionCoefficient_Generic(Components=None,SourceTables=None,partitionFunction=PYTIPS2017,
+                                  Environment=None,OmegaRange=None,OmegaStep=None,OmegaWing=None,
+                                  IntensityThreshold=DefaultIntensityThreshold,
+                                  OmegaWingHW=DefaultOmegaWingHW,
+                                  GammaL='gamma_air', HITRAN_units=True, LineShift=True,
+                                  File=None, Format=None, OmegaGrid=None,
+                                  WavenumberRange=None,WavenumberStep=None,WavenumberWing=None,
+                                  WavenumberWingHW=None,WavenumberGrid=None,
+                                  Diluent={},LineMixingRosen=False,
+                                  profile=None,calcpars=None,exclude=set(),
+                                  DEBUG=None):
+                                                              
+    # Throw exception if profile or calcpars are empty.
+    if profile is None: raise Exception('user must provide the line profile function')
+    if calcpars is None: raise Exception('user must provide the function for calculating profile parameters')
+        
+    if DEBUG is not None: 
+        VARIABLES['abscoef_debug'] = True
+    else:
+        VARIABLES['abscoef_debug'] = False
+        
+    if not LineMixingRosen: exclude.add('YRosen')
+    if not LineShift: exclude.update({'Delta0','Delta2'})
     
-    if LineMixingRosen is True:
-        raise NotImplementedError('line mixing is not implemented yet for this function')
-      
     # Parameters OmegaRange,OmegaStep,OmegaWing,OmegaWingHW, and OmegaGrid
     # are deprecated and given for backward compatibility with the older versions.
     if WavenumberRange:  OmegaRange=WavenumberRange
@@ -18366,7 +19197,10 @@ def absorptionCoefficient_HT(Components=None,SourceTables=None,partitionFunction
                                 OmegaStep,OmegaWing,IntensityThreshold,Format)
     
     # warn user about too large omega step
-    if OmegaStep>0.1: warn('Big wavenumber step: possible accuracy decline')
+    if OmegaStep>0.005 and profile is PROFILE_DOPPLER: 
+        warn('Big wavenumber step: possible accuracy decline')
+    elif OmegaStep>0.1: 
+        warn('Big wavenumber step: possible accuracy decline')
 
     # get uniform linespace for cross-section
     #number_of_points = (OmegaRange[1]-OmegaRange[0])/OmegaStep + 1
@@ -18380,21 +19214,13 @@ def absorptionCoefficient_HT(Components=None,SourceTables=None,partitionFunction
     Xsect = zeros(number_of_points)
        
     # reference temperature and pressure
-    Tref = __FloatType__(296.) # K
-    pref = __FloatType__(1.) # atm
+    T_ref_default = __FloatType__(296.) # K
+    p_ref_default = __FloatType__(1.) # atm
     
     # actual temperature and pressure
     T = Environment['T'] # K
     p = Environment['p'] # atm
        
-    # Find reference temperature
-    TRanges = [(0,100),(100,200),(200,400),(400,float('inf'))]
-    Trefs = [50.,150.,296.,700.]
-    for TRange,TrefHT in zip(TRanges,Trefs):
-        if T >= TRange[0] and T < TRange[1]:
-            break
-    if VARIABLES['DEBUG']: print('absorptionCoefficient_HT: TrefHT=%f'%TrefHT)
-
     # create dictionary from Components
     ABUNDANCES = {}
     NATURAL_ABUNDANCES = {}
@@ -18411,20 +19237,12 @@ def absorptionCoefficient_HT(Components=None,SourceTables=None,partitionFunction
         ABUNDANCES[(M,I)] = ni
         NATURAL_ABUNDANCES[(M,I)] = ISO[(M,I)][ISO_INDEX['abundance']]
         
-    # precalculation of volume concentration
+    # pre-calculation of volume concentration
     if HITRAN_units:
         factor = __FloatType__(1.0)
     else:
         factor = volumeConcentration(p,T)
-    if VARIABLES['DEBUG']: print('absorptionCoefficient_HT: factor=%f'%factor)        
         
-    # setup the default empty environment dependence function
-    if not EnvDependences:
-        EnvDependences = lambda ENV,LINE:{}
-    Env = Environment.copy()
-    Env['Tref'] = Tref
-    Env['pref'] = pref
-  
     # setup the Diluent variable
     GammaL = GammaL.lower()
     if not Diluent:
@@ -18434,7 +19252,6 @@ def absorptionCoefficient_HT(Components=None,SourceTables=None,partitionFunction
             Diluent = {'self':1.}
         else:
             raise Exception('Unknown GammaL value: %s' % GammaL)
-    if VARIABLES['DEBUG']: print('absorptionCoefficient_HT: Diluent=%s'%Diluent)
         
     # Simple check
     print(Diluent)  # Added print statement # CHANGED RJH 23MAR18  # Simple check
@@ -18442,1162 +19259,181 @@ def absorptionCoefficient_HT(Components=None,SourceTables=None,partitionFunction
         val = Diluent[key]
         if val < 0 or val > 1: # if val < 0 and val > 1:# CHANGED RJH 23MAR18
             raise Exception('Diluent fraction must be in [0,1]')
+            
+    # ================= HERE THE GENERIC PART STARTS =====================
+
+    t = time()
+    
+    CALC_INFO_TOTAL = []
     
     # SourceTables contain multiple tables
     for TableName in SourceTables:
+    
+        # exclude parameters not involved in calculation
+        DATA_DICT = LOCAL_TABLE_CACHE[TableName]['data']
+        parnames_exclude = ['a','global_upper_quanta','global_lower_quanta',
+            'local_upper_quanta','local_lower_quanta','ierr','iref','line_mixing_flag'] 
+        parnames = set(DATA_DICT)-set(parnames_exclude)
+        
+        nlines = len(DATA_DICT['nu'])
 
-        # get the number of rows
-        nline = LOCAL_TABLE_CACHE[TableName]['header']['number_of_rows']
-        
-        # get parameter names for each table
-        parnames = LOCAL_TABLE_CACHE[TableName]['data'].keys()
-        
-        # loop through line centers (single stream)
-        for RowID in range(nline):
-            
-            # Get the custom environment dependences
-            Line = {}
-            for parname in parnames:
-                Line[parname] = LOCAL_TABLE_CACHE[TableName]['data'][parname][RowID]
-            CustomEnvDependences = EnvDependences(Env,Line)
-            
-            # get basic line parameters (lower level)
-            LineCenterDB = LOCAL_TABLE_CACHE[TableName]['data']['nu'][RowID]
-            LineIntensityDB = LOCAL_TABLE_CACHE[TableName]['data']['sw'][RowID]
-            LowerStateEnergyDB = LOCAL_TABLE_CACHE[TableName]['data']['elower'][RowID]
-            MoleculeNumberDB = LOCAL_TABLE_CACHE[TableName]['data']['molec_id'][RowID]
-            IsoNumberDB = LOCAL_TABLE_CACHE[TableName]['data']['local_iso_id'][RowID]
+        for RowID in range(nlines):
+                            
+            # create the transition object
+            TRANS = CaselessDict({parname:DATA_DICT[parname][RowID] for parname in parnames}) # CORRECTLY HANDLES DIFFERENT SPELLING OF PARNAMES
+            TRANS['T'] = T
+            TRANS['p'] = p
+            TRANS['T_ref'] = T_ref_default
+            TRANS['p_ref'] = p_ref_default
+            TRANS['Diluent'] = Diluent
+            TRANS['Abundances'] = ABUNDANCES
             
             # filter by molecule and isotopologue
-            if (MoleculeNumberDB,IsoNumberDB) not in ABUNDANCES: continue
-            
-            # partition functions for T and Tref
-            SigmaT = partitionFunction(MoleculeNumberDB,IsoNumberDB,T)
-            SigmaTref = partitionFunction(MoleculeNumberDB,IsoNumberDB,Tref)
-            
-            # get all environment dependences from voigt parameters
-            
-            #   intensity
-            if 'sw' in CustomEnvDependences:
-                LineIntensity = CustomEnvDependences['sw']
-            else:
-                LineIntensity = EnvironmentDependency_Intensity(LineIntensityDB,T,Tref,SigmaT,SigmaTref,
-                                                                LowerStateEnergyDB,LineCenterDB)
-            
+            if (TRANS['molec_id'],TRANS['local_iso_id']) not in ABUNDANCES: continue
+                
             #   FILTER by LineIntensity: compare it with IntencityThreshold
+            TRANS['SigmaT']     = partitionFunction(TRANS['molec_id'],TRANS['local_iso_id'],TRANS['T'])
+            TRANS['SigmaT_ref'] = partitionFunction(TRANS['molec_id'],TRANS['local_iso_id'],TRANS['T_ref'])
+            LineIntensity = calculate_parameter_Sw(None,TRANS)
             if LineIntensity < IntensityThreshold: continue
-            
-            #   doppler broadening coefficient (GammaD)
-            cMassMol = 1.66053873e-27 # hapi
-            m = molecularMass(MoleculeNumberDB,IsoNumberDB) * cMassMol * 1000
-            GammaD = sqrt(2*cBolts*T*log(2)/m/cc**2)*LineCenterDB
-            
-            #   pressure broadening coefficients
-            Gamma0 = 0.; Shift0 = 0.; Gamma2 = 0.; Shift2 = 0.; Eta = 0; NuVC = 0.
-            for species in Diluent:
-                species_lower = species # species_lower = species.lower() # CHANGED RJH 23MAR18
-                
-                abun = Diluent[species]
-                
-                # Search for broadening HWHM.
-                try:
-                    # search for HT-style name
-                    Gamma0DB = LOCAL_TABLE_CACHE[TableName]['data']['gamma_HT_0_%s_%d'%(species_lower,TrefHT)][RowID]
-                    if Gamma0DB == 0.: raise KeyError
-                    if VARIABLES['DEBUG']: print('absorptionCoefficient_HT: Gamma0DB=%f (found as %s)'%(Gamma0DB,'gamma_HT_0_%s_%d'%(species_lower,TrefHT)))
-                except KeyError:
-                    try:
-                        # search for Voigt-style name
-                        Gamma0DB = LOCAL_TABLE_CACHE[TableName]['data']['gamma_%s'%species_lower][RowID]
-                        if VARIABLES['DEBUG']: print('absorptionCoefficient_HT: Gamma0DB=%f (found as %s)'%(Gamma0DB,'gamma_%s'%species_lower))
-                    except KeyError:
-                        Gamma0DB = 0.0
-                        if VARIABLES['DEBUG']: print('absorptionCoefficient_HT: Gamma0DB=%f (not found in database)'%Gamma0DB)
-                
-                # Search for temperature exponent for broadening HWHM.
-                try:
-                    # search for HT-style name
-                    TempRatioPowerDB = LOCAL_TABLE_CACHE[TableName]['data']['n_HT_%s_%d'%(species_lower,TrefHT)][RowID]
-                    if TempRatioPowerDB == 0.: raise KeyError
-                    Tref = TrefHT
-                    if VARIABLES['DEBUG']: print('absorptionCoefficient_HT: TempRatioPowerDB=%f (found as %s)'%(TempRatioPowerDB,'n_HT_%s_%d'%(species_lower,TrefHT)))
-                except KeyError:
-                    Tref = 296.
-                    try:
-                        # search for Voigt-style name
-                        TempRatioPowerDB = LOCAL_TABLE_CACHE[TableName]['data']['n_%s'%species_lower][RowID]
-                        if VARIABLES['DEBUG']: print('absorptionCoefficient_HT: TempRatioPowerDB=%f (found as %s). Tref is set to 296K.'%(TempRatioPowerDB,'n_%s'%species_lower))
-                        if species_lower == 'self' and TempRatioPowerDB == 0.:
-                            TempRatioPowerDB = LOCAL_TABLE_CACHE[TableName]['data']['n_air'][RowID] # same for self as for air
-                            if VARIABLES['DEBUG']: print('absorptionCoefficient_HT: using n_air for self species because n_self=0.0')
-                    except KeyError:
-                        #print('TempRatioPowerDB is set to zero')
-                        #TempRatioPowerDB = 0                    
-                        TempRatioPowerDB = LOCAL_TABLE_CACHE[TableName]['data']['n_air'][RowID]
-                        if VARIABLES['DEBUG']: print('absorptionCoefficient_HT: TempRatioPowerDB=%f (found as n_air). Tref is set to 296K.'%TempRatioPowerDB)
-                
-                # Add to the final Gamma0
-                Gamma0T = CustomEnvDependences.get('gamma_HT_0_%s_%d'%(species_lower,TrefHT),
-                           CustomEnvDependences.get('gamma_%s'%species_lower, 
-                            EnvironmentDependency_Gamma0(Gamma0DB,T,Tref,p,pref,TempRatioPowerDB)))
-                Gamma0 += abun*Gamma0T
 
-                # Search for shift.
-                try:
-                    # search for HT-style name
-                    Shift0DB = LOCAL_TABLE_CACHE[TableName]['data']['delta_HT_0_%s_%d'%(species_lower,TrefHT)][RowID]
-                    if Shift0DB == 0.: raise KeyError
-                    if VARIABLES['DEBUG']: print('absorptionCoefficient_HT: Shift0DB=%f (found as %s)'%(Shift0DB,'delta_HT_0_%s_%d'%(species_lower,TrefHT)))
-                except KeyError:
-                    try:
-                        # search for Voigt-style name
-                        Shift0DB = LOCAL_TABLE_CACHE[TableName]['data']['delta_%s'%species_lower][RowID]
-                        if VARIABLES['DEBUG']: print('absorptionCoefficient_HT: Shift0DB=%f (found as %s)'%(Shift0DB,'delta_%s'%species_lower))
-                    except KeyError:
-                        Shift0DB = 0.0
-                        if VARIABLES['DEBUG']: print('absorptionCoefficient_HT: Shift0DB=%f (not found in database)'%Shift0DB)
-                
-                # Search for temperature dependence for shift.
-                try:
-                    # search for HT-style name
-                    deltap = LOCAL_TABLE_CACHE[TableName]['data']['deltap_HT_%s_%d'%(species_lower,TrefHT)][RowID]
-                    if deltap ==0.: raise KeyError
-                    Tref = TrefHT
-                    if VARIABLES['DEBUG']: print('absorptionCoefficient_HT: deltap=%f (found as %s)'%(deltap,'deltap_HT_%s_%d'%(species_lower,TrefHT)))
-                except KeyError:
-                    Tref = 296.
-                    try:
-                        # search for Voigt-style name
-                        deltap = LOCAL_TABLE_CACHE[TableName]['data']['deltap_%s'%species_lower][RowID]
-                        if VARIABLES['DEBUG']: print('absorptionCoefficient_HT: deltap=%f (found as %s). Tref is set to 296K.'%(deltap,'deltap_%s'%species_lower))
-                    except KeyError:
-                        deltap = 0.0
-                        if VARIABLES['DEBUG']: print('absorptionCoefficient_HT: deltap=%f (not found in database)'%deltap)
-
-                Shift0T = CustomEnvDependences.get('deltap_HT_%s_%d'%(species_lower,TrefHT),
-                                CustomEnvDependences.get('deltap_%s'%species_lower,
-                                 ((Shift0DB + deltap*(T-Tref))*p/pref)))
-                Shift0 += abun*Shift0T
-                
-                # Search for speed dependence for HWHM.
-                try:
-                    Gamma2DB = LOCAL_TABLE_CACHE[TableName]['data']['gamma_HT_2_%s_%d'%(species_lower,TrefHT)][RowID]
-                    #if Gamma2DB ==0.: raise KeyError
-                    if VARIABLES['DEBUG']: print('absorptionCoefficient_HT: Gamma2DB=%f (found as %s)'%(Gamma2DB,'gamma_HT_2_%s_%d'%(species_lower,TrefHT)))
-                except KeyError:
-                    try:
-                        SDDB = LOCAL_TABLE_CACHE[TableName]['data']['SD_%s'%species_lower][RowID]
-                        Gamma2DB = SDDB*Gamma0DB
-                        if VARIABLES['DEBUG']: print('absorptionCoefficient_HT: SDDB=%f (found as %s)'%(SDDB,'SD_%s'%species_lower))
-                        if VARIABLES['DEBUG']: print('absorptionCoefficient_HT: Gamma2DB = SDDB*Gamma0DB')
-                    except KeyError:
-                        Gamma2DB = 0.0
-                        if VARIABLES['DEBUG']: print('absorptionCoefficient_HT: Gamma2DB=%f (not found in database)'%Gamma2DB)
-
-                Gamma2T = CustomEnvDependences.get('gamma_HT_2_%s_%d'%(species_lower,TrefHT),Gamma2DB*(p/pref))
-                Gamma2 += abun*Gamma2T
-                
-                # Search for speed dependence for shift.
-                try:
-                    Shift2DB = LOCAL_TABLE_CACHE[TableName]['data']['delta_HT_2_%s_%d'%(species_lower,TrefHT)][RowID]
-                    if VARIABLES['DEBUG']: print('absorptionCoefficient_HT: Shift2DB=%f (found as %s)'%(Shift2DB,'delta_HT_2_%s_%d'%(species_lower,TrefHT)))
-                except KeyError:
-                    Shift2DB = 0.
-                    if VARIABLES['DEBUG']: print('absorptionCoefficient_HT: Shift2DB=%f (not found in database)'%Shift2DB)
-                
-                Shift2T = CustomEnvDependences.get('delta_HT_2_%s_%d'%(species_lower,TrefHT),Shift2DB*p/pref)
-                Shift2 += abun*Shift2T
-                
-                # Setup correlation parameter
-                try:
-                    EtaDB = LOCAL_TABLE_CACHE[TableName]['data']['eta_HT_%s'%species_lower][RowID]
-                    if VARIABLES['DEBUG']: print('absorptionCoefficient_HT: EtaDB=%f (found as %s)'%(EtaDB,'eta_HT_%s'%species_lower))
-                except KeyError:
-                    EtaDB = 0.
-                    if VARIABLES['DEBUG']: print('absorptionCoefficient_HT: EtaDB=%f (not found in database)'%EtaDB)
-                    
-                Eta += EtaDB*abun*(Gamma2T-1j*Shift2T)
-                
-                # Search for frequency of VC (general formula depends on Eta)
-                try:
-                    NuVCDB = LOCAL_TABLE_CACHE[TableName]['data']['nu_HT_%s'%species_lower][RowID]
-                    if VARIABLES['DEBUG']: print('absorptionCoefficient_HT: NuVCDB=%f (found as %s)'%(NuVCDB,'nu_HT_%s'%species_lower))
-                except KeyError:
-                    NuVCDB = 0.
-                    if VARIABLES['DEBUG']: print('absorptionCoefficient_HT: NuVCDB=%f (not found in database)'%NuVCDB)
-                
-                # Search for temperature exponent for frequency of VC
-                try:
-                    KappaDB = LOCAL_TABLE_CACHE[TableName]['data']['kappa_HT_%s'%species_lower][RowID]
-                    if VARIABLES['DEBUG']: print('absorptionCoefficient_HT: KappaDB=%f (found as %s)'%(KappaDB,'kappa_HT_%s'%species_lower))
-                except KeyError:
-                    KappaDB = 0.
-                    if VARIABLES['DEBUG']: print('absorptionCoefficient_HT: KappaDB=%f (not found in database)'%KappaDB)
-                
-                # 1st NuVC component: weighted sum of NuVC_i
-                NuVC += abun*CustomEnvDependences.get('nu_HT_%s'%species_lower,
-                             NuVCDB*(Tref/T)**KappaDB*p)
-                
-                # 2nd NuVC component (with negative sign)
-                NuVC -= EtaDB*abun*(Gamma0T-1j*Shift0T)
-                        
-            # Calculate Eta by dividing the sum on (Gamma2-1j*Shift2)
-            if Eta!=0: Eta /= Gamma2-1j*Shift2  # (avoid division-by-zero ambiguity)
+            # calculate profile parameters 
+            if VARIABLES['abscoef_debug']:
+                CALC_INFO = {}
+            else:
+                CALC_INFO = None                
+            PARAMETERS = calcpars(TRANS=TRANS,CALC_INFO=CALC_INFO,exclude=exclude)
             
-            # 3rd (final) NuVC component, depending on final Eta parameter
-            NuVC += Eta*(Gamma0-1j*Shift0)
-                                    
-            # get final wing of the line according to Gamma0, OmegaWingHW and OmegaWing
-            OmegaWingF = max(OmegaWing,OmegaWingHW*Gamma0,OmegaWingHW*GammaD)
+            # get final wing of the line according to max(Gamma0,GammaD), OmegaWingHW and OmegaWing
+            try:
+                GammaD = PARAMETERS['GammaD']
+            except KeyError:
+                GammaD = 0
+            try:
+                Gamma0 = PARAMETERS['Gamma0']
+            except KeyError:
+                Gamma0 = 0
+            GammaMax = max(Gamma0,GammaD)
+            if GammaMax==0 and OmegaWingHW==0:
+                OmegaWing = 10.0 # 10 cm-1 default in case if Gamma0 and GammaD are missing
+                warn('Gamma0 and GammaD are missing; setting OmegaWing to %f cm-1'%OmegaWing)
+            OmegaWingF = max(OmegaWing,OmegaWingHW*GammaMax)
             
-            # convert to float type if imaginary parts are zero (avoiding warnings in pcqsdhc)  
-            #if Eta.imag==0: Eta=Eta.real
-            #if NuVC.imag==0: NuVC=NuVC.real
-
-            BoundIndexLower = bisect(Omegas,LineCenterDB-OmegaWingF)
-            BoundIndexUpper = bisect(Omegas,LineCenterDB+OmegaWingF)
-            lineshape_vals = PROFILE_HT(LineCenterDB,GammaD,Gamma0,Gamma2,Shift0,Shift2,NuVC,Eta,Omegas[BoundIndexLower:BoundIndexUpper])[0]
-            Xsect[BoundIndexLower:BoundIndexUpper] += factor / NATURAL_ABUNDANCES[(MoleculeNumberDB,IsoNumberDB)] * \
-                                                      ABUNDANCES[(MoleculeNumberDB,IsoNumberDB)] * \
-                                                      LineIntensity * lineshape_vals
-   
-    if File: save_to_file(File,Format,Omegas,Xsect)
-    return Omegas,Xsect
+            # calculate profile on a grid            
+            BoundIndexLower = bisect(Omegas,TRANS['nu']-OmegaWingF)
+            BoundIndexUpper = bisect(Omegas,TRANS['nu']+OmegaWingF)
+            PARAMETERS['WnGrid'] = Omegas[BoundIndexLower:BoundIndexUpper]
+            lineshape_vals = profile(**PARAMETERS)
+            Xsect[BoundIndexLower:BoundIndexUpper] += factor * lineshape_vals
+                   
+            # append debug information for the abscoef routine                
+            if VARIABLES['abscoef_debug']: DEBUG.append(CALC_INFO)
+        
+    print('%f seconds elapsed for abscoef; nlines = %d'%(time()-t,nlines))
     
+    if File: save_to_file(File,Format,Omegas,Xsect)
+    return Omegas,Xsect    
 
-def absorptionCoefficient_SDVoigt(Components=None,SourceTables=None,partitionFunction=PYTIPS2017,
-                                Environment=None,OmegaRange=None,OmegaStep=None,OmegaWing=None,
-                                IntensityThreshold=DefaultIntensityThreshold,
-                                OmegaWingHW=DefaultOmegaWingHW,
-                                GammaL='gamma_air', HITRAN_units=True, LineShift=True,
-                                File=None, Format=None, OmegaGrid=None,
-                                WavenumberRange=None,WavenumberStep=None,WavenumberWing=None,
-                                WavenumberWingHW=None,WavenumberGrid=None,
-                                Diluent={},EnvDependences=None,LineMixingRosen=False):
+def absorptionCoefficient_Priority(*args,**kwargs):
+    return absorptionCoefficient_Generic(*args,**kwargs,
+                                         profile=PROFILE_HT,
+                                         calcpars=calculateProfileParametersFullPriority)    
+    
+def absorptionCoefficient_HT(*args,**kwargs):
+    return absorptionCoefficient_Generic(*args,**kwargs,
+                                         profile=PROFILE_HT,
+                                         calcpars=calculateProfileParametersHT)    
+                                   
+def absorptionCoefficient_SDVoigt(*args,**kwargs):
+    return absorptionCoefficient_Generic(*args,**kwargs,
+                                          profile=PROFILE_SDVOIGT,
+                                          calcpars=calculateProfileParametersSDVoigt)
+        
+def absorptionCoefficient_Voigt(*args,**kwargs):
+    return absorptionCoefficient_Generic(*args,**kwargs,
+                                          profile=PROFILE_VOIGT,
+                                          calcpars=calculateProfileParametersVoigt)
+
+def absorptionCoefficient_Lorentz(*args,**kwargs):
+    return absorptionCoefficient_Generic(*args,**kwargs,
+                                         profile=PROFILE_LORENTZ,
+                                         calcpars=calculateProfileParametersLorentz)
+     
+def absorptionCoefficient_Doppler(*args,**kwargs):   
+    return absorptionCoefficient_Generic(*args,**kwargs,
+                                         profile=PROFILE_DOPPLER,
+                                         calcpars=calculateProfileParametersDoppler)
+    
+absorptionCoefficient_Generic.__doc__ = ABSCOEF_DOCSTRING_TEMPLATE.format(
+    profile='Generic',
+    usage_example="""
+        nu,coef = absorptionCoefficient_Generic(((2,1),),'co2',WavenumberStep=0.01,
+                                              HITRAN_units=False,Diluent={'air':1},
+                                              profile=PROFILE_VOIGT,
+                                              calcpars=calcProfileParametersVoigt,
+                                              DEBUG=None,
+                                              )
     """
-    INPUT PARAMETERS: 
-        Components:  list of tuples [(M,I,D)], where
-                        M - HITRAN molecule number,
-                        I - HITRAN isotopologue number,
-                        D - relative abundance (optional)
-        SourceTables:  list of tables from which to calculate cross-section   (optional)
-        partitionFunction:  pointer to partition function (default is PYTIPS) (optional)
-        Environment:  dictionary containing thermodynamic parameters.
-                        'p' - pressure in atmospheres,
-                        'T' - temperature in Kelvin
-                        Default={'p':1.,'T':296.}
-        WavenumberRange:  wavenumber range to consider.
-        WavenumberStep:   wavenumber step to consider. 
-        WavenumberWing:   absolute wing for calculating a lineshape (in cm-1) 
-        WavenumberWingHW:  relative wing for calculating a lineshape (in halfwidths)
-        IntensityThreshold:  threshold for intensities
-        GammaL:  specifies broadening parameter ('gamma_air' or 'gamma_self')
-        HITRAN_units:  use cm2/molecule (True) or cm-1 (False) for absorption coefficient
-        File:   write output to file (if specified)
-        Format:  c-format of file output (accounts for significant digits in WavenumberStep)
-        LineMixingRosen: include 1st order line mixing to calculation
-    OUTPUT PARAMETERS: 
-        Wavenum: wavenumber grid with respect to parameters WavenumberRange and WavenumberStep
-        Xsect: absorption coefficient calculated on the grid
-    ---
-    DESCRIPTION:
-        Calculate absorption coefficient using SDVoigt profile.
-        Absorption coefficient is calculated at arbitrary temperature and pressure.
-        User can vary a wide range of parameters to control a process of calculation.
-        The choise of these parameters depends on properties of a particular linelist.
-        Default values are a sort of guess which gives a decent precision (on average) 
-        for a reasonable amount of cpu time. To increase calculation accuracy,
-        user should use a trial and error method.
-    ---
-    EXAMPLE OF USAGE:
+)
+
+absorptionCoefficient_Priority.__doc__ = ABSCOEF_DOCSTRING_TEMPLATE.format(
+    profile='Priority',
+    usage_example="""
+        nu,coef = absorptionCoefficient_Priority(((2,1),),'co2',WavenumberStep=0.01,
+                                              HITRAN_units=False,Diluent={'air':1})
+    """
+)
+                                   
+absorptionCoefficient_HT.__doc__ = ABSCOEF_DOCSTRING_TEMPLATE.format(
+    profile='HT',
+    usage_example="""
+        nu,coef = absorptionCoefficient_HT(((2,1),),'co2',WavenumberStep=0.01,
+                                              HITRAN_units=False,Diluent={'air':1})
+    """
+)
+
+absorptionCoefficient_SDVoigt.__doc__ = ABSCOEF_DOCSTRING_TEMPLATE.format(
+    profile='SDVoigt',
+    usage_example="""
         nu,coef = absorptionCoefficient_SDVoigt(((2,1),),'co2',WavenumberStep=0.01,
-                                              HITRAN_units=False,GammaL='gamma_self')
-    ---
+                                              HITRAN_units=False,Diluent={'air':1})
     """
-    
-    # Paremeters OmegaRange,OmegaStep,OmegaWing,OmegaWingHW, and OmegaGrid
-    # are deprecated and given for backward compatibility with the older versions.
-    if WavenumberRange:  OmegaRange=WavenumberRange
-    if WavenumberStep:   OmegaStep=WavenumberStep
-    if WavenumberWing:   OmegaWing=WavenumberWing
-    if WavenumberWingHW: OmegaWingHW=WavenumberWingHW
-    if WavenumberGrid:   OmegaGrid=WavenumberGrid
+)
 
-    # "bug" with 1-element list
-    Components = listOfTuples(Components)
-    SourceTables = listOfTuples(SourceTables)
-    
-    # determine final input values
-    Components,SourceTables,Environment,OmegaRange,OmegaStep,OmegaWing,\
-    IntensityThreshold,Format = \
-       getDefaultValuesForXsect(Components,SourceTables,Environment,OmegaRange,
-                                OmegaStep,OmegaWing,IntensityThreshold,Format)
-    
-    # warn user about too large omega step
-    if OmegaStep>0.1: warn('Big wavenumber step: possible accuracy decline')
-
-    # get uniform linespace for cross-section
-    #number_of_points = (OmegaRange[1]-OmegaRange[0])/OmegaStep + 1
-    #Omegas = linspace(OmegaRange[0],OmegaRange[1],number_of_points)
-    if OmegaGrid is not None:
-        Omegas = npsort(OmegaGrid)
-    else:
-        #Omegas = arange(OmegaRange[0],OmegaRange[1],OmegaStep)
-        Omegas = arange_(OmegaRange[0],OmegaRange[1],OmegaStep) # fix
-    number_of_points = len(Omegas)
-    Xsect = zeros(number_of_points)
-       
-    # reference temperature and pressure
-    Tref = __FloatType__(296.) # K
-    pref = __FloatType__(1.) # atm
-    
-    # actual temperature and pressure
-    T = Environment['T'] # K
-    p = Environment['p'] # atm
-       
-    # create dictionary from Components
-    ABUNDANCES = {}
-    NATURAL_ABUNDANCES = {}
-    for Component in Components:
-        M = Component[0]
-        I = Component[1]
-        if len(Component) >= 3:
-            ni = Component[2]
-        else:
-            try:
-                ni = ISO[(M,I)][ISO_INDEX['abundance']]
-            except KeyError:
-                raise Exception('cannot find component M,I = %d,%d.' % (M,I))
-        ABUNDANCES[(M,I)] = ni
-        NATURAL_ABUNDANCES[(M,I)] = ISO[(M,I)][ISO_INDEX['abundance']]
-        
-    # precalculation of volume concentration
-    if HITRAN_units:
-        factor = __FloatType__(1.0)
-    else:
-        factor = volumeConcentration(p,T) 
-        
-    # setup the default empty environment dependence function
-    if not EnvDependences:
-        EnvDependences = lambda ENV,LINE:{}
-    Env = Environment.copy()
-    Env['Tref'] = Tref
-    Env['pref'] = pref
-  
-    # setup the Diluent variable
-    GammaL = GammaL.lower()
-    if not Diluent:
-        if GammaL == 'gamma_air':
-            Diluent = {'air':1.}
-        elif GammaL == 'gamma_self':
-            Diluent = {'self':1.}
-        else:
-            raise Exception('Unknown GammaL value: %s' % GammaL)
-        
-    # Simple check
-    print(Diluent)  # Added print statement # CHANGED RJH 23MAR18  # Simple check
-    for key in Diluent:
-        val = Diluent[key]
-        if val < 0 or val > 1: # if val < 0 and val > 1:# CHANGED RJH 23MAR18
-            raise Exception('Diluent fraction must be in [0,1]')
-    
-    # SourceTables contain multiple tables
-    for TableName in SourceTables:
-
-        # get the number of rows
-        nline = LOCAL_TABLE_CACHE[TableName]['header']['number_of_rows']
-        
-        # get parameter names for each table
-        parnames = LOCAL_TABLE_CACHE[TableName]['data'].keys()
-        
-        # loop through line centers (single stream)
-        for RowID in range(nline):
-            
-            # Get the custom environment dependences
-            Line = {}
-            for parname in parnames:
-                Line[parname] = LOCAL_TABLE_CACHE[TableName]['data'][parname][RowID]
-            CustomEnvDependences = EnvDependences(Env,Line)
-            
-            # get basic line parameters (lower level)
-            LineCenterDB = LOCAL_TABLE_CACHE[TableName]['data']['nu'][RowID]
-            LineIntensityDB = LOCAL_TABLE_CACHE[TableName]['data']['sw'][RowID]
-            LowerStateEnergyDB = LOCAL_TABLE_CACHE[TableName]['data']['elower'][RowID]
-            MoleculeNumberDB = LOCAL_TABLE_CACHE[TableName]['data']['molec_id'][RowID]
-            IsoNumberDB = LOCAL_TABLE_CACHE[TableName]['data']['local_iso_id'][RowID]
-            
-            # filter by molecule and isotopologue
-            if (MoleculeNumberDB,IsoNumberDB) not in ABUNDANCES: continue
-            
-            # partition functions for T and Tref
-            SigmaT = partitionFunction(MoleculeNumberDB,IsoNumberDB,T)
-            SigmaTref = partitionFunction(MoleculeNumberDB,IsoNumberDB,Tref)
-            
-            # get all environment dependences from voigt parameters
-            
-            #   intensity
-            if 'sw' in CustomEnvDependences:
-                LineIntensity = CustomEnvDependences['sw']
-            else:
-                LineIntensity = EnvironmentDependency_Intensity(LineIntensityDB,T,Tref,SigmaT,SigmaTref,
-                                                                LowerStateEnergyDB,LineCenterDB)
-            
-            #   FILTER by LineIntensity: compare it with IntencityThreshold
-            if LineIntensity < IntensityThreshold: continue
-            
-            #   doppler broadening coefficient (GammaD)
-            cMassMol = 1.66053873e-27 # hapi
-            m = molecularMass(MoleculeNumberDB,IsoNumberDB) * cMassMol * 1000
-            GammaD = sqrt(2*cBolts*T*log(2)/m/cc**2)*LineCenterDB
-            
-            #   pressure broadening coefficient
-            Gamma0 = 0.; Shift0 = 0.; Gamma2 = 0.; Shift2 = 0.; Ylm = 0.
-            for species in Diluent:
-                species_lower = species # species_lower = species.lower() # CHANGED RJH 23MAR18
-                
-                abun = Diluent[species]
-                
-                gamma_name = 'gamma_' + species_lower
-                try:
-                    Gamma0DB = LOCAL_TABLE_CACHE[TableName]['data'][gamma_name][RowID]
-                except:
-                    Gamma0DB = 0.0
-                
-                n_name = 'n_' + species_lower
-                try:
-                    TempRatioPowerDB = LOCAL_TABLE_CACHE[TableName]['data'][n_name][RowID]
-                    if species_lower == 'self' and TempRatioPowerDB == 0.:
-                        TempRatioPowerDB = LOCAL_TABLE_CACHE[TableName]['data']['n_air'][RowID] # same for self as for air
-                except:
-                    #TempRatioPowerDB = 0                    
-                    TempRatioPowerDB = LOCAL_TABLE_CACHE[TableName]['data']['n_air'][RowID]
-                
-                # Add to the final Gamma0
-                Gamma0 += abun*CustomEnvDependences.get(gamma_name, # default ->
-                          EnvironmentDependency_Gamma0(Gamma0DB,T,Tref,p,pref,TempRatioPowerDB))
-
-                delta_name = 'delta_' + species_lower
-                try:
-                    Shift0DB = LOCAL_TABLE_CACHE[TableName]['data'][delta_name][RowID]
-                except:
-                    Shift0DB = 0.0
-                
-                deltap_name = 'deltap_' + species_lower
-                try:
-                    deltap = LOCAL_TABLE_CACHE[TableName]['data'][deltap_name][RowID]
-                except:
-                    deltap = 0.0
-
-                Shift0 += abun*CustomEnvDependences.get(delta_name, # default ->
-                          ((Shift0DB + deltap*(T-Tref))*p/pref))
-            
-                SD_name = 'sd_' + species_lower
-                try:
-                    SDDB = LOCAL_TABLE_CACHE[TableName]['data'][SD_name][RowID]
-                except:
-                    SDDB = 0.0
-
-                Gamma2 += abun*CustomEnvDependences.get(SD_name, # default ->
-                          SDDB*p/pref) * Gamma0DB # SDDB IS DIMENSIONLESS (LIKE THE ONES M. DEVI USED)
-
-                Y_name = 'y_sdv_' + species_lower + '_296' # this time only 296K; should be remade in case of multiple temperature references!
-                try:
-                    YlmDB = LOCAL_TABLE_CACHE[TableName]['data'][Y_name][RowID]
-                except:
-                    YlmDB = 0.0
-
-                Ylm += abun*CustomEnvDependences.get(Y_name, # default ->
-                          YlmDB*p/pref) # TODO: CHECK                          
-                
-                if not LineMixingRosen: Ylm = 0.0
-                          
-            #   get final wing of the line according to Gamma0, OmegaWingHW and OmegaWing
-            OmegaWingF = max(OmegaWing,OmegaWingHW*Gamma0,OmegaWingHW*GammaD)
-
-            BoundIndexLower = bisect(Omegas,LineCenterDB-OmegaWingF)
-            BoundIndexUpper = bisect(Omegas,LineCenterDB+OmegaWingF)
-            lineshape_vals = PROFILE_SDVOIGT(LineCenterDB,GammaD,Gamma0,Gamma2,Shift0,Shift2,Omegas[BoundIndexLower:BoundIndexUpper],Ylm)[0]
-            Xsect[BoundIndexLower:BoundIndexUpper] += factor / NATURAL_ABUNDANCES[(MoleculeNumberDB,IsoNumberDB)] * \
-                                                      ABUNDANCES[(MoleculeNumberDB,IsoNumberDB)] * \
-                                                      LineIntensity * lineshape_vals
-   
-    if File: save_to_file(File,Format,Omegas,Xsect)
-    return Omegas,Xsect
-    
-    
-def absorptionCoefficient_Voigt(Components=None,SourceTables=None,partitionFunction=PYTIPS2017,
-                                Environment=None,OmegaRange=None,OmegaStep=None,OmegaWing=None,
-                                IntensityThreshold=DefaultIntensityThreshold,
-                                OmegaWingHW=DefaultOmegaWingHW,
-                                GammaL='gamma_air', HITRAN_units=True, LineShift=True,
-                                File=None, Format=None, OmegaGrid=None,
-                                WavenumberRange=None,WavenumberStep=None,WavenumberWing=None,
-                                WavenumberWingHW=None,WavenumberGrid=None,
-                                Diluent={},EnvDependences=None,LineMixingRosen=False):
-    """
-    INPUT PARAMETERS: 
-        Components:  list of tuples [(M,I,D)], where
-                        M - HITRAN molecule number,
-                        I - HITRAN isotopologue number,
-                        D - relative abundance (optional)
-        SourceTables:  list of tables from which to calculate cross-section   (optional)
-        partitionFunction:  pointer to partition function (default is PYTIPS) (optional)
-        Environment:  dictionary containing thermodynamic parameters.
-                        'p' - pressure in atmospheres,
-                        'T' - temperature in Kelvin
-                        Default={'p':1.,'T':296.}
-        WavenumberRange:  wavenumber range to consider.
-        WavenumberStep:   wavenumber step to consider. 
-        WavenumberWing:   absolute wing for calculating a lineshape (in cm-1) 
-        WavenumberWingHW:  relative wing for calculating a lineshape (in halfwidths)
-        IntensityThreshold:  threshold for intensities
-        GammaL:  specifies broadening parameter ('gamma_air' or 'gamma_self')
-        HITRAN_units:  use cm2/molecule (True) or cm-1 (False) for absorption coefficient
-        File:   write output to file (if specified)
-        Format:  c-format of file output (accounts for significant digits in WavenumberStep)
-        LineMixingRosen: include 1st order line mixing to calculation
-    OUTPUT PARAMETERS: 
-        Wavenum: wavenumber grid with respect to parameters WavenumberRange and WavenumberStep
-        Xsect: absorption coefficient calculated on the grid
-    ---
-    DESCRIPTION:
-        Calculate absorption coefficient using Voigt profile.
-        Absorption coefficient is calculated at arbitrary temperature and pressure.
-        User can vary a wide range of parameters to control a process of calculation.
-        The choise of these parameters depends on properties of a particular linelist.
-        Default values are a sort of guess which gives a decent precision (on average) 
-        for a reasonable amount of cpu time. To increase calculation accuracy,
-        user should use a trial and error method.
-    ---
-    EXAMPLE OF USAGE:
+absorptionCoefficient_Voigt.__doc__ = ABSCOEF_DOCSTRING_TEMPLATE.format(
+    profile='Voigt',
+    usage_example="""
         nu,coef = absorptionCoefficient_Voigt(((2,1),),'co2',WavenumberStep=0.01,
-                                              HITRAN_units=False,GammaL='gamma_self')
-    ---
+                                              HITRAN_units=False,Diluent={'air':1})
     """
+)
 
-    if LineMixingRosen is True:
-        raise NotImplementedError('line mixing is not implemented yet for this function')
-    
-    # Paremeters OmegaRange,OmegaStep,OmegaWing,OmegaWingHW, and OmegaGrid
-    # are deprecated and given for backward compatibility with the older versions.
-    if WavenumberRange:  OmegaRange=WavenumberRange
-    if WavenumberStep:   OmegaStep=WavenumberStep
-    if WavenumberWing:   OmegaWing=WavenumberWing
-    if WavenumberWingHW: OmegaWingHW=WavenumberWingHW
-    if WavenumberGrid:   OmegaGrid=WavenumberGrid
-
-    # "bug" with 1-element list
-    Components = listOfTuples(Components)
-    SourceTables = listOfTuples(SourceTables)
-    
-    # determine final input values
-    Components,SourceTables,Environment,OmegaRange,OmegaStep,OmegaWing,\
-    IntensityThreshold,Format = \
-       getDefaultValuesForXsect(Components,SourceTables,Environment,OmegaRange,
-                                OmegaStep,OmegaWing,IntensityThreshold,Format)
-    
-    # warn user about too large omega step
-    if OmegaStep>0.1: warn('Big wavenumber step: possible accuracy decline')
-
-    # get uniform linespace for cross-section
-    #number_of_points = (OmegaRange[1]-OmegaRange[0])/OmegaStep + 1
-    #Omegas = linspace(OmegaRange[0],OmegaRange[1],number_of_points)
-    if OmegaGrid is not None:
-        Omegas = npsort(OmegaGrid)
-    else:
-        #Omegas = arange(OmegaRange[0],OmegaRange[1],OmegaStep)
-        Omegas = arange_(OmegaRange[0],OmegaRange[1],OmegaStep) # fix
-    number_of_points = len(Omegas)
-    Xsect = zeros(number_of_points)
-       
-    # reference temperature and pressure
-    Tref = __FloatType__(296.) # K
-    pref = __FloatType__(1.) # atm
-    
-    # actual temperature and pressure
-    T = Environment['T'] # K
-    p = Environment['p'] # atm
-       
-    # create dictionary from Components
-    ABUNDANCES = {}
-    NATURAL_ABUNDANCES = {}
-    for Component in Components:
-        M = Component[0]
-        I = Component[1]
-        if len(Component) >= 3:
-            ni = Component[2]
-        else:
-            try:
-                ni = ISO[(M,I)][ISO_INDEX['abundance']]
-            except KeyError:
-                raise Exception('cannot find component M,I = %d,%d.' % (M,I))
-        ABUNDANCES[(M,I)] = ni
-        NATURAL_ABUNDANCES[(M,I)] = ISO[(M,I)][ISO_INDEX['abundance']]
-        
-    # precalculation of volume concentration
-    if HITRAN_units:
-        factor = __FloatType__(1.0)
-    else:
-        factor = volumeConcentration(p,T) 
-        
-    # setup the default empty environment dependence function
-    if not EnvDependences:
-        EnvDependences = lambda ENV,LINE:{}
-    Env = Environment.copy()
-    Env['Tref'] = Tref
-    Env['pref'] = pref
-  
-    # setup the Diluent variable
-    GammaL = GammaL.lower()
-    if not Diluent:
-        if GammaL == 'gamma_air':
-            Diluent = {'air':1.}
-        elif GammaL == 'gamma_self':
-            Diluent = {'self':1.}
-        else:
-            raise Exception('Unknown GammaL value: %s' % GammaL)
-        
-    # Simple check
-    print(Diluent)  # Added print statement # CHANGED RJH 23MAR18  # Simple check
-    for key in Diluent:
-        val = Diluent[key]
-        if val < 0 or val > 1: # if val < 0 and val > 1:# CHANGED RJH 23MAR18
-            raise Exception('Diluent fraction must be in [0,1]')
-    
-    # SourceTables contain multiple tables
-    for TableName in SourceTables:
-
-        # get the number of rows
-        nline = LOCAL_TABLE_CACHE[TableName]['header']['number_of_rows']
-        
-        # get parameter names for each table
-        parnames = LOCAL_TABLE_CACHE[TableName]['data'].keys()
-        
-        # loop through line centers (single stream)
-        for RowID in range(nline):
-            
-            # Get the custom environment dependences
-            Line = {}
-            for parname in parnames:
-                Line[parname] = LOCAL_TABLE_CACHE[TableName]['data'][parname][RowID]
-            CustomEnvDependences = EnvDependences(Env,Line)
-            
-            # get basic line parameters (lower level)
-            LineCenterDB = LOCAL_TABLE_CACHE[TableName]['data']['nu'][RowID]
-            LineIntensityDB = LOCAL_TABLE_CACHE[TableName]['data']['sw'][RowID]
-            LowerStateEnergyDB = LOCAL_TABLE_CACHE[TableName]['data']['elower'][RowID]
-            MoleculeNumberDB = LOCAL_TABLE_CACHE[TableName]['data']['molec_id'][RowID]
-            IsoNumberDB = LOCAL_TABLE_CACHE[TableName]['data']['local_iso_id'][RowID]
-            
-            # filter by molecule and isotopologue
-            if (MoleculeNumberDB,IsoNumberDB) not in ABUNDANCES: continue
-            
-            # partition functions for T and Tref
-            SigmaT = partitionFunction(MoleculeNumberDB,IsoNumberDB,T)
-            SigmaTref = partitionFunction(MoleculeNumberDB,IsoNumberDB,Tref)
-            
-            # get all environment dependences from voigt parameters
-            
-            #   intensity
-            if 'sw' in CustomEnvDependences:
-                LineIntensity = CustomEnvDependences['sw']
-            else:
-                LineIntensity = EnvironmentDependency_Intensity(LineIntensityDB,T,Tref,SigmaT,SigmaTref,
-                                                                LowerStateEnergyDB,LineCenterDB)
-            
-            #   FILTER by LineIntensity: compare it with IntencityThreshold
-            if LineIntensity < IntensityThreshold: continue
-            
-            #   doppler broadening coefficient (GammaD)
-            cMassMol = 1.66053873e-27 # hapi
-            m = molecularMass(MoleculeNumberDB,IsoNumberDB) * cMassMol * 1000
-            GammaD = sqrt(2*cBolts*T*log(2)/m/cc**2)*LineCenterDB
-            
-            #   pressure broadening coefficient
-            Gamma0 = 0.; Shift0 = 0.;
-            for species in Diluent:
-                species_lower = species # species_lower = species.lower() # CHANGED RJH 23MAR18
-                
-                abun = Diluent[species]
-                
-                gamma_name = 'gamma_' + species_lower
-                try:
-                    Gamma0DB = LOCAL_TABLE_CACHE[TableName]['data'][gamma_name][RowID]
-                except:
-                    Gamma0DB = 0.0
-                
-                n_name = 'n_' + species_lower
-                try:
-                    TempRatioPowerDB = LOCAL_TABLE_CACHE[TableName]['data'][n_name][RowID]
-                    if species_lower == 'self' and TempRatioPowerDB == 0.:
-                        TempRatioPowerDB = LOCAL_TABLE_CACHE[TableName]['data']['n_air'][RowID] # same for self as for air
-                except:
-                    #TempRatioPowerDB = 0                    
-                    TempRatioPowerDB = LOCAL_TABLE_CACHE[TableName]['data']['n_air'][RowID]
-                
-                # Add to the final Gamma0
-                Gamma0 += abun*CustomEnvDependences.get(gamma_name, # default ->
-                          EnvironmentDependency_Gamma0(Gamma0DB,T,Tref,p,pref,TempRatioPowerDB))
-
-                delta_name = 'delta_' + species_lower
-                try:
-                    Shift0DB = LOCAL_TABLE_CACHE[TableName]['data'][delta_name][RowID]
-                except:
-                    Shift0DB = 0.0
-                
-                deltap_name = 'deltap_' + species_lower
-                try:
-                    deltap = LOCAL_TABLE_CACHE[TableName]['data'][deltap_name][RowID]
-                except:
-                    deltap = 0.0
-
-                Shift0 += abun*CustomEnvDependences.get(delta_name, # default ->
-                          ((Shift0DB + deltap*(T-Tref))*p/pref))
-            
-            #   get final wing of the line according to Gamma0, OmegaWingHW and OmegaWing
-            OmegaWingF = max(OmegaWing,OmegaWingHW*Gamma0,OmegaWingHW*GammaD)
-
-            BoundIndexLower = bisect(Omegas,LineCenterDB-OmegaWingF)
-            BoundIndexUpper = bisect(Omegas,LineCenterDB+OmegaWingF)
-            lineshape_vals = PROFILE_VOIGT(LineCenterDB+Shift0,GammaD,Gamma0,Omegas[BoundIndexLower:BoundIndexUpper])[0]
-            Xsect[BoundIndexLower:BoundIndexUpper] += factor / NATURAL_ABUNDANCES[(MoleculeNumberDB,IsoNumberDB)] * \
-                                                      ABUNDANCES[(MoleculeNumberDB,IsoNumberDB)] * \
-                                                      LineIntensity * lineshape_vals
-    
-    if File: save_to_file(File,Format,Omegas,Xsect)
-    return Omegas,Xsect
-    
-
-def absorptionCoefficient_Lorentz(Components=None,SourceTables=None,partitionFunction=PYTIPS2017,
-                                Environment=None,OmegaRange=None,OmegaStep=None,OmegaWing=None,
-                                IntensityThreshold=DefaultIntensityThreshold,
-                                OmegaWingHW=DefaultOmegaWingHW,
-                                GammaL='gamma_air', HITRAN_units=True, LineShift=True,
-                                File=None, Format=None, OmegaGrid=None,
-                                WavenumberRange=None,WavenumberStep=None,WavenumberWing=None,
-                                WavenumberWingHW=None,WavenumberGrid=None,
-                                Diluent={},EnvDependences=None):
-    """
-    INPUT PARAMETERS: 
-        Components:  list of tuples [(M,I,D)], where
-                        M - HITRAN molecule number,
-                        I - HITRAN isotopologue number,
-                        D - relative abundance (optional)
-        SourceTables:  list of tables from which to calculate cross-section   (optional)
-        partitionFunction:  pointer to partition function (default is PYTIPS) (optional)
-        Environment:  dictionary containing thermodynamic parameters.
-                        'p' - pressure in atmospheres,
-                        'T' - temperature in Kelvin
-                        Default={'p':1.,'T':296.}
-        WavenumberRange:  wavenumber range to consider.
-        WavenumberStep:   wavenumber step to consider. 
-        WavenumberWing:   absolute wing for calculating a lineshape (in cm-1) 
-        WavenumberWingHW:  relative wing for calculating a lineshape (in halfwidths)
-        IntensityThreshold:  threshold for intensities
-        GammaL:  specifies broadening parameter ('gamma_air' or 'gamma_self')
-        HITRAN_units:  use cm2/molecule (True) or cm-1 (False) for absorption coefficient
-        File:   write output to file (if specified)
-        Format:  c-format of file output (accounts for significant digits in WavenumberStep)
-    OUTPUT PARAMETERS: 
-        Wavenum: wavenumber grid with respect to parameters WavenumberRange and WavenumberStep
-        Xsect: absorption coefficient calculated on the grid
-    ---
-    DESCRIPTION:
-        Calculate absorption coefficient using Lorentz profile.
-        Absorption coefficient is calculated at arbitrary temperature and pressure.
-        User can vary a wide range of parameters to control a process of calculation.
-        The choise of these parameters depends on properties of a particular linelist.
-        Default values are a sort of guess which gives a decent precision (on average) 
-        for a reasonable amount of cpu time. To increase calculation accuracy,
-        user should use a trial and error method.
-    ---
-    EXAMPLE OF USAGE:
+absorptionCoefficient_Lorentz.__doc__ = ABSCOEF_DOCSTRING_TEMPLATE.format(
+    profile='Lorentz',
+    usage_example="""
         nu,coef = absorptionCoefficient_Lorentz(((2,1),),'co2',WavenumberStep=0.01,
-                                              HITRAN_units=False,GammaL='gamma_self')
-    ---
+                                              HITRAN_units=False,Diluent={'air':1})
     """
-   
-    # Paremeters OmegaRange,OmegaStep,OmegaWing,OmegaWingHW, and OmegaGrid
-    # are deprecated and given for backward compatibility with the older versions.
-    if WavenumberRange:  OmegaRange=WavenumberRange
-    if WavenumberStep:   OmegaStep=WavenumberStep
-    if WavenumberWing:   OmegaWing=WavenumberWing
-    if WavenumberWingHW: OmegaWingHW=WavenumberWingHW
-    if WavenumberGrid:   OmegaGrid=WavenumberGrid
+)
 
-    # "bug" with 1-element list
-    Components = listOfTuples(Components)
-    SourceTables = listOfTuples(SourceTables)
-    
-    # determine final input values
-    Components,SourceTables,Environment,OmegaRange,OmegaStep,OmegaWing,\
-    IntensityThreshold,Format = \
-       getDefaultValuesForXsect(Components,SourceTables,Environment,OmegaRange,
-                                OmegaStep,OmegaWing,IntensityThreshold,Format)
-    
-    # warn user about too large omega step
-    if OmegaStep>0.1: warn('Big wavenumber step: possible accuracy decline')
-
-    # get uniform linespace for cross-section
-    #number_of_points = (OmegaRange[1]-OmegaRange[0])/OmegaStep + 1
-    #Omegas = linspace(OmegaRange[0],OmegaRange[1],number_of_points)
-    if OmegaGrid is not None:
-        Omegas = npsort(OmegaGrid)
-    else:
-        #Omegas = arange(OmegaRange[0],OmegaRange[1],OmegaStep)
-        Omegas = arange_(OmegaRange[0],OmegaRange[1],OmegaStep) # fix
-    number_of_points = len(Omegas)
-    Xsect = zeros(number_of_points)
-       
-    # reference temperature and pressure
-    Tref = __FloatType__(296.) # K
-    pref = __FloatType__(1.) # atm
-    
-    # actual temperature and pressure
-    T = Environment['T'] # K
-    p = Environment['p'] # atm
-       
-    # create dictionary from Components
-    ABUNDANCES = {}
-    NATURAL_ABUNDANCES = {}
-    for Component in Components:
-        M = Component[0]
-        I = Component[1]
-        if len(Component) >= 3:
-            ni = Component[2]
-        else:
-            try:
-                ni = ISO[(M,I)][ISO_INDEX['abundance']]
-            except KeyError:
-                raise Exception('cannot find component M,I = %d,%d.' % (M,I))
-        ABUNDANCES[(M,I)] = ni
-        NATURAL_ABUNDANCES[(M,I)] = ISO[(M,I)][ISO_INDEX['abundance']]
-        
-    # precalculation of volume concentration
-    if HITRAN_units:
-        factor = __FloatType__(1.0)
-    else:
-        factor = volumeConcentration(p,T) 
-        
-    # setup the default empty environment dependence function
-    if not EnvDependences:
-        EnvDependences = lambda ENV,LINE:{}
-    Env = Environment.copy()
-    Env['Tref'] = Tref
-    Env['pref'] = pref
-  
-    # setup the Diluent variable
-    GammaL = GammaL.lower()
-    if not Diluent:
-        if GammaL == 'gamma_air':
-            Diluent = {'air':1.}
-        elif GammaL == 'gamma_self':
-            Diluent = {'self':1.}
-        else:
-            raise Exception('Unknown GammaL value: %s' % GammaL)
-        
-    # Simple check
-    print(Diluent)  # Added print statement # CHANGED RJH 23MAR18  # Simple check
-    for key in Diluent:
-        val = Diluent[key]
-        if val < 0 or val > 1: # if val < 0 and val > 1:# CHANGED RJH 23MAR18
-            raise Exception('Diluent fraction must be in [0,1]')
-    
-    # SourceTables contain multiple tables
-    for TableName in SourceTables:
-
-        # get the number of rows
-        nline = LOCAL_TABLE_CACHE[TableName]['header']['number_of_rows']
-        
-        # get parameter names for each table
-        parnames = LOCAL_TABLE_CACHE[TableName]['data'].keys()
-        
-        # loop through line centers (single stream)
-        for RowID in range(nline):
-            
-            # Get the custom environment dependences
-            Line = {}
-            for parname in parnames:
-                Line[parname] = LOCAL_TABLE_CACHE[TableName]['data'][parname][RowID]
-            CustomEnvDependences = EnvDependences(Env,Line)
-            
-            # get basic line parameters (lower level)
-            LineCenterDB = LOCAL_TABLE_CACHE[TableName]['data']['nu'][RowID]
-            LineIntensityDB = LOCAL_TABLE_CACHE[TableName]['data']['sw'][RowID]
-            LowerStateEnergyDB = LOCAL_TABLE_CACHE[TableName]['data']['elower'][RowID]
-            MoleculeNumberDB = LOCAL_TABLE_CACHE[TableName]['data']['molec_id'][RowID]
-            IsoNumberDB = LOCAL_TABLE_CACHE[TableName]['data']['local_iso_id'][RowID]
-            
-            # filter by molecule and isotopologue
-            if (MoleculeNumberDB,IsoNumberDB) not in ABUNDANCES: continue
-            
-            # partition functions for T and Tref
-            SigmaT = partitionFunction(MoleculeNumberDB,IsoNumberDB,T)
-            SigmaTref = partitionFunction(MoleculeNumberDB,IsoNumberDB,Tref)
-            
-            # get all environment dependences from voigt parameters
-            
-            #   intensity
-            if 'sw' in CustomEnvDependences:
-                LineIntensity = CustomEnvDependences['sw']
-            else:
-                LineIntensity = EnvironmentDependency_Intensity(LineIntensityDB,T,Tref,SigmaT,SigmaTref,
-                                                                LowerStateEnergyDB,LineCenterDB)
-            
-            #   FILTER by LineIntensity: compare it with IntencityThreshold
-            if LineIntensity < IntensityThreshold: continue
-                       
-            #   pressure broadening coefficient
-            Gamma0 = 0.; Shift0 = 0.;
-            for species in Diluent:
-                species_lower = species # species_lower = species.lower() # CHANGED RJH 23MAR18
-                
-                abun = Diluent[species]
-                
-                gamma_name = 'gamma_' + species_lower
-                try:
-                    Gamma0DB = LOCAL_TABLE_CACHE[TableName]['data'][gamma_name][RowID]
-                except:
-                    Gamma0DB = 0.0
-                
-                n_name = 'n_' + species_lower
-                try:
-                    TempRatioPowerDB = LOCAL_TABLE_CACHE[TableName]['data'][n_name][RowID]
-                    if species_lower == 'self' and TempRatioPowerDB == 0.:
-                        TempRatioPowerDB = LOCAL_TABLE_CACHE[TableName]['data']['n_air'][RowID] # same for self as for air
-                except:
-                    #TempRatioPowerDB = 0                    
-                    TempRatioPowerDB = LOCAL_TABLE_CACHE[TableName]['data']['n_air'][RowID]
-                
-                # Add to the final Gamma0
-                Gamma0 += abun*CustomEnvDependences.get(gamma_name, # default ->
-                          EnvironmentDependency_Gamma0(Gamma0DB,T,Tref,p,pref,TempRatioPowerDB))
-
-                delta_name = 'delta_' + species_lower
-                try:
-                    Shift0DB = LOCAL_TABLE_CACHE[TableName]['data'][delta_name][RowID]
-                except:
-                    Shift0DB = 0.0
-                
-                deltap_name = 'deltap_' + species_lower
-                try:
-                    deltap = LOCAL_TABLE_CACHE[TableName]['data'][deltap_name][RowID]
-                except:
-                    deltap = 0.0
-
-                Shift0 += abun*CustomEnvDependences.get(delta_name, # default ->
-                          ((Shift0DB + deltap*(T-Tref))*p/pref))
-            
-            #   get final wing of the line according to Gamma0, OmegaWingHW and OmegaWing
-            OmegaWingF = max(OmegaWing,OmegaWingHW*Gamma0)
-
-            BoundIndexLower = bisect(Omegas,LineCenterDB-OmegaWingF)
-            BoundIndexUpper = bisect(Omegas,LineCenterDB+OmegaWingF)
-            lineshape_vals = PROFILE_LORENTZ(LineCenterDB+Shift0,Gamma0,Omegas[BoundIndexLower:BoundIndexUpper])
-            Xsect[BoundIndexLower:BoundIndexUpper] += factor / NATURAL_ABUNDANCES[(MoleculeNumberDB,IsoNumberDB)] * \
-                                                      ABUNDANCES[(MoleculeNumberDB,IsoNumberDB)] * \
-                                                      LineIntensity * lineshape_vals
-    
-    if File: save_to_file(File,Format,Omegas,Xsect)
-    return Omegas,Xsect
-    
-# Alias for a profile selector
-#absorptionCoefficient = absorptionCoefficient_HT
-    
-# ==========================================================================================
-# =========================== /NEW ABSORPTION COEFFICIENT ===================================
-# ==========================================================================================    
-
-# calculate apsorption for Doppler profile
-def absorptionCoefficient_Doppler(Components=None,SourceTables=None,partitionFunction=PYTIPS2017,
-                                  Environment=None,OmegaRange=None,OmegaStep=None,OmegaWing=None,
-                                  IntensityThreshold=DefaultIntensityThreshold,
-                                  OmegaWingHW=DefaultOmegaWingHW,
-                                  ParameterBindings=DefaultParameterBindings,
-                                  EnvironmentDependencyBindings=DefaultEnvironmentDependencyBindings,
-                                  GammaL='dummy', HITRAN_units=True, LineShift=True,
-                                  File=None, Format=None, OmegaGrid=None,
-                                  WavenumberRange=None,WavenumberStep=None,WavenumberWing=None,
-                                  WavenumberWingHW=None,WavenumberGrid=None,Diluent=None):   
-    """
-    INPUT PARAMETERS: 
-        Components:  list of tuples [(M,I,D)], where
-                        M - HITRAN molecule number,
-                        I - HITRAN isotopologue number,
-                        D - abundance (optional)
-        SourceTables:  list of tables from which to calculate cross-section   (optional)
-        partitionFunction:  pointer to partition function (default is PYTIPS) (optional)
-        Environment:  dictionary containing thermodynamic parameters.
-                        'p' - pressure in atmospheres,
-                        'T' - temperature in Kelvin
-                        Default={'p':1.,'T':296.}
-        WavenumberRange:  wavenumber range to consider.
-        WavenumberStep:   wavenumber step to consider. 
-        WavenumberWing:   absolute wing for calculating a lineshape (in cm-1) 
-        WavenumberWingHW:  relative wing for calculating a lineshape (in halfwidths)
-        IntensityThreshold:  threshold for intensities
-        GammaL:  specifies broadening parameter ('gamma_air' or 'gamma_self')
-        HITRAN_units:  use cm2/molecule (True) or cm-1 (False) for absorption coefficient
-        File:   write output to file (if specified)
-        Format:  c-format of file output (accounts for significant digits in WavenumberStep)
-    OUTPUT PARAMETERS: 
-        Wavenum: wavenumber grid with respect to parameters OmegaRange and OmegaStep
-        Xsect: absorption coefficient calculated on the grid
-    ---
-    DESCRIPTION:
-        Calculate absorption coefficient using Doppler (Gauss) profile.
-        Absorption coefficient is calculated at arbitrary temperature and pressure.
-        User can vary a wide range of parameters to control a process of calculation.
-        The choise of these parameters depends on properties of a particular linelist.
-        Default values are a sort of guess which give a decent precision (on average) 
-        for a reasonable amount of cpu time. To increase calculation accuracy,
-        user should use a trial and error method.
-    ---
-    EXAMPLE OF USAGE:
+absorptionCoefficient_Doppler.__doc__ = ABSCOEF_DOCSTRING_TEMPLATE.format(
+    profile='Doppler',
+    usage_example="""
         nu,coef = absorptionCoefficient_Doppler(((2,1),),'co2',WavenumberStep=0.01,
-                                              HITRAN_units=False,GammaL='gamma_self')
-    ---
+                                              HITRAN_units=False,Diluent={'air':1})
     """
-
-    if WavenumberRange:  OmegaRange=WavenumberRange
-    if WavenumberStep:   OmegaStep=WavenumberStep
-    if WavenumberWing:   OmegaWing=WavenumberWing
-    if WavenumberWingHW: OmegaWingHW=WavenumberWingHW
-    if WavenumberGrid:   OmegaGrid=WavenumberGrid
+)    
     
-    # "bug" with 1-element list
-    Components = listOfTuples(Components)
-    SourceTables = listOfTuples(SourceTables)
-    
-    # determine final input values
-    Components,SourceTables,Environment,OmegaRange,OmegaStep,OmegaWing,\
-    IntensityThreshold,Format = \
-       getDefaultValuesForXsect(Components,SourceTables,Environment,OmegaRange,
-                                OmegaStep,OmegaWing,IntensityThreshold,Format)
-    # special for Doppler case: set OmegaStep to a smaller value
-    if not OmegaStep: OmegaStep = 0.001
-                
-    # warn user about too large omega step
-    if OmegaStep>0.005: warn('Big wavenumber step: possible accuracy decline')
-
-    # get uniform linespace for cross-section
-    #number_of_points = (OmegaRange[1]-OmegaRange[0])/OmegaStep + 1
-    #Omegas = linspace(OmegaRange[0],OmegaRange[1],number_of_points)
-    if OmegaGrid is not None:
-        Omegas = npsort(OmegaGrid)
-    else:
-        #Omegas = arange(OmegaRange[0],OmegaRange[1],OmegaStep)
-        Omegas = arange_(OmegaRange[0],OmegaRange[1],OmegaStep) # fix
-    number_of_points = len(Omegas)
-    Xsect = zeros(number_of_points)
-       
-    # reference temperature and pressure
-    Tref = __FloatType__(296.) # K
-    pref = __FloatType__(1.) # atm
-    
-    # actual temperature and pressure
-    T = Environment['T'] # K
-    p = Environment['p'] # atm
-       
-    # create dictionary from Components
-    ABUNDANCES = {}
-    NATURAL_ABUNDANCES = {}
-    for Component in Components:
-        M = Component[0]
-        I = Component[1]
-        if len(Component) >= 3:
-            ni = Component[2]
-        else:
-            try:
-                ni = ISO[(M,I)][ISO_INDEX['abundance']]
-            except KeyError:
-                raise Exception('cannot find component M,I = %d,%d.' % (M,I))
-        ABUNDANCES[(M,I)] = ni
-        NATURAL_ABUNDANCES[(M,I)] = ISO[(M,I)][ISO_INDEX['abundance']]
-        
-    # precalculation of volume concentration
-    if HITRAN_units:
-        factor = __FloatType__(1.0)
-    else:
-        factor = volumeConcentration(p,T) 
-        
-    # SourceTables contain multiple tables
-    for TableName in SourceTables:
-
-        # get line centers
-        nline = LOCAL_TABLE_CACHE[TableName]['header']['number_of_rows']
-        
-        # loop through line centers (single stream)
-        for RowID in range(nline):
-            
-            # get basic line parameters (lower level)
-            LineCenterDB = LOCAL_TABLE_CACHE[TableName]['data']['nu'][RowID]
-            LineIntensityDB = LOCAL_TABLE_CACHE[TableName]['data']['sw'][RowID]
-            LowerStateEnergyDB = LOCAL_TABLE_CACHE[TableName]['data']['elower'][RowID]
-            MoleculeNumberDB = LOCAL_TABLE_CACHE[TableName]['data']['molec_id'][RowID]
-            IsoNumberDB = LOCAL_TABLE_CACHE[TableName]['data']['local_iso_id'][RowID]
-            if LineShift:
-                Shift0DB = LOCAL_TABLE_CACHE[TableName]['data']['delta_air'][RowID]
-            else:
-                Shift0DB = 0
-            
-            # filter by molecule and isotopologue
-            if (MoleculeNumberDB,IsoNumberDB) not in ABUNDANCES: continue
-            
-            # partition functions for T and Tref
-            # TODO: optimize
-            SigmaT = partitionFunction(MoleculeNumberDB,IsoNumberDB,T)
-            SigmaTref = partitionFunction(MoleculeNumberDB,IsoNumberDB,Tref)
-            
-            # get all environment dependences from voigt parameters
-            
-            #   intensity
-            LineIntensity = EnvironmentDependency_Intensity(LineIntensityDB,T,Tref,SigmaT,SigmaTref,
-                                                            LowerStateEnergyDB,LineCenterDB)
-            
-            #   FILTER by LineIntensity: compare it with IntencityThreshold
-            # TODO: apply wing narrowing instead of filtering, this would be more appropriate
-            if LineIntensity < IntensityThreshold: continue
-            
-            cMassMol = 1.66053873e-27
-            fSqrtMass = sqrt(molecularMass(MoleculeNumberDB,IsoNumberDB))
-            cc_ = 2.99792458e8
-            cBolts_ = 1.3806503e-23
-            GammaD = (cSqrt2Ln2/cc_)*sqrt(cBolts_/cMassMol)*sqrt(T) * LineCenterDB/fSqrtMass
-                        
-            #   get final wing of the line according to GammaD, OmegaWingHW and OmegaWing
-            OmegaWingF = max(OmegaWing,OmegaWingHW*GammaD)
-
-            #   shift coefficient
-            Shift0 = Shift0DB*p/pref
-
-            BoundIndexLower = bisect(Omegas,LineCenterDB-OmegaWingF)
-            BoundIndexUpper = bisect(Omegas,LineCenterDB+OmegaWingF)
-            lineshape_vals = PROFILE_DOPPLER(LineCenterDB+Shift0,GammaD,Omegas[BoundIndexLower:BoundIndexUpper])
-            Xsect[BoundIndexLower:BoundIndexUpper] += factor / NATURAL_ABUNDANCES[(MoleculeNumberDB,IsoNumberDB)] * \
-                                                      ABUNDANCES[(MoleculeNumberDB,IsoNumberDB)] * \
-                                                      LineIntensity * lineshape_vals
-
-    if File: save_to_file(File,Format,Omegas,Xsect)
-    return Omegas,Xsect
-
-# -------------------------------------------------------------------------------
-# UNIFIED INTERFACE FOR THE ABSORPTION COEFFICIENT AND CROSS-SECTION CALCULATIONS
-# -------------------------------------------------------------------------------
-PROFILE_MAP = {
-    'Voigt': absorptionCoefficient_Voigt,
-    'Lorentz': absorptionCoefficient_Lorentz,
-    'Doppler': absorptionCoefficient_Doppler,
-    'SDV': absorptionCoefficient_SDVoigt,
-    'HT': absorptionCoefficient_HT,
-}
-def absorptionCrossSection(profile='HT',**argv):
-    argv['HITRAN_units'] = True
-    return PROFILE_MAP[profile](**argv)
-    
-def absorptionCoefficient(profile='HT',**argv):
-    argv['HITRAN_units'] = False
-    return PROFILE_MAP[profile](**argv)    
+# save numpy arrays to file
+# arrays must have same dimensions
+def save_to_file(fname,fformat,*arg):
+    f = open(fname,'w')
+    for i in range(len(arg[0])):
+        argline = []
+        for j in range(len(arg)):
+            argline.append(arg[j][i])
+        f.write((fformat+'\n') % tuple(argline))
+    f.close()
     
 # ---------------------------------------------------------------------------
 # SHORTCUTS AND ALIASES FOR ABSORPTION COEFFICIENTS
@@ -19945,3 +19781,41 @@ def convolveSpectrumFull(Omega,CrossSection,Resolution=0.1,AF_wing=10.,SlitFunct
     return Omega,CrossSectionLowRes,None,None
 
 # ------------------------------------------------------------------
+
+# ------------------  SAVE CALC INFO IN CSV FORMAT -------------------------
+
+def save_abscoef_calc_info(filename,parname,CALC_INFO_LIST,delim=';'):
+    """
+    This is an attempt to save the CALC_INFO from the 
+    new versions of the abscoef function.
+    Currently it saves one parameters per call.
+    To build your own function that better suits your needs
+    please consult the structure of the CALC_INFO elements.
+    """
+    col = [] # make empty collection
+    order = []    
+    for CALC_INFO in CALC_INFO_LIST:
+        INFO = CALC_INFO[parname]
+        item = {}
+        item['val'] = INFO['value']
+        if 'val' not in order: 
+            order.append('val')
+        for broadener in INFO['mixture']:
+            for argname in INFO['mixture'][broadener]['args']:
+                src_name = '%s_%s_src'%(argname,broadener)
+                val_name = '%s_%s_val'%(argname,broadener)
+                item[src_name] = INFO['mixture'][broadener]['args'][argname]['source']
+                item[val_name] = INFO['mixture'][broadener]['args'][argname]['value']
+                if src_name not in order:
+                    order.append(src_name)
+                if val_name not in order:
+                    order.append(val_name)
+        col.append(item)    
+    # Export the result to the CSV file.
+    #col.export_csv('test2.py_%s_%s.csv'%(TABLE_NAMETABLE_NAME,parname),order=order)    
+    with open(filename,'w') as fout:
+        header = ('%s'%delim).join(order)
+        fout.write(header+'\n')
+        for CALC_INFO in col:
+            line = ('%s'%delim).join([str(CALC_INFO.get(pname,'')) for pname in order])
+            fout.write(line+'\n')
