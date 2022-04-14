@@ -1,7 +1,7 @@
 # HITRAN Application Programming Interface (HAPI)
 ===============================================
 
-Current version: 1.2.2.0
+Current version: 1.2.2.1
 
 ## Version history
 
@@ -42,6 +42,7 @@ Current version: 1.2.2.0
   35) ADDED NEW FUNCTIONAL INTERFACES FOR ALL CROSS-SECTION CALCULATING ROUTINES (ver. 1.2.0.0)
   36) ADDED CALCULATION OF THE ISO_ID TABLE ON STARTUP (ver. 1.2.1.0)
   37) ADDED SUPPORT FOR TIPS-2021 (ver. 1.2.2.0)
+  38) FIXED BUG WITH WAVENUMBERGRID (ver. 1.2.2.1)
 
 ## Introduction
 

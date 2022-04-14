@@ -54,7 +54,7 @@ if 'io' in sys.modules: # define open using Linux-style line endings
 else:
     open_ = open
 
-HAPI_VERSION = '1.2.2.0'; __version__ = HAPI_VERSION
+HAPI_VERSION = '1.2.2.1'; __version__ = HAPI_VERSION
 HAPI_HISTORY = [
 'FIXED GRID BUG (ver. 1.1.0.1)',
 'FIXED OUTPUT FORMAT FOR CROSS-SECTIONS (ver. 1.1.0.1)',
@@ -93,6 +93,7 @@ HAPI_HISTORY = [
 'ADDED NEW FUNCTIONAL INTERFACES FOR ALL CROSS-SECTION CALCULATING ROUTINES (ver. 1.2.0.0)',
 'ADDED CALCULATION OF THE ISO_ID TABLE ON STARTUP (ver. 1.2.1.0)',
 'ADDED SUPPORT FOR TIPS-2021 (ver. 1.2.2.0)',
+'FIXED BUG WITH WAVENUMBERGRID (ver. 1.2.2.1)',
 ]
 
 # version header
@@ -35391,11 +35392,11 @@ def absorptionCoefficient_Generic(Components=None,SourceTables=None,partitionFun
     
     # Parameters OmegaRange,OmegaStep,OmegaWing,OmegaWingHW, and OmegaGrid
     # are deprecated and given for backward compatibility with the older versions.
-    if WavenumberRange:  OmegaRange=WavenumberRange
-    if WavenumberStep:   OmegaStep=WavenumberStep
-    if WavenumberWing:   OmegaWing=WavenumberWing
-    if WavenumberWingHW: OmegaWingHW=WavenumberWingHW
-    if WavenumberGrid:   OmegaGrid=WavenumberGrid
+    if WavenumberRange is not None:  OmegaRange=WavenumberRange
+    if WavenumberStep is not None:   OmegaStep=WavenumberStep
+    if WavenumberWing is not None:   OmegaWing=WavenumberWing
+    if WavenumberWingHW is not None: OmegaWingHW=WavenumberWingHW
+    if WavenumberGrid is not None:   OmegaGrid=WavenumberGrid
 
     # "bug" with 1-element list
     Components = listOfTuples(Components)
