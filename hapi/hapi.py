@@ -2181,7 +2181,7 @@ def select(TableName,DestinationTableName=QUERY_BUFFER,ParameterNames=None,Condi
         TableName:            name of source table              (required)
         DestinationTableName: name of resulting table           (optional)
         ParameterNames:       list of parameters or expressions (optional)
-        Conditions:           list of logincal expressions      (optional)
+        Conditions:           list of logical expressions      (optional)
         Output:   enable (True) or suppress (False) text output (optional)
         File:     enable (True) or suppress (False) file output (optional)
     OUTPUT PARAMETERS: 
