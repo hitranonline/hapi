@@ -37,6 +37,8 @@ from bisect import bisect
 from warnings import warn,simplefilter
 from time import time
 import pydoc
+import ssl
+import certifi
 
 # Enable warning repetitions
 simplefilter('always', UserWarning)
@@ -2855,7 +2857,7 @@ def queryHITRAN(TableName,iso_id_list,numin,numax,pargroups=[],params=[],dotpar=
             proxy = urllib2.ProxyHandler(VARIABLES['PROXY'])
             opener = urllib2.build_opener(proxy)
             urllib2.install_opener(opener)            
-        req = urllib2.urlopen(url)
+        req = urllib2.urlopen(url, context=ssl.create_default_context(cafile=certifi.where()))
     except urllib2.HTTPError:
         raise Exception('Failed to retrieve data for given parameters.')
     except urllib2.URLError:
