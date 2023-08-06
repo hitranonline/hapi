@@ -3889,7 +3889,7 @@ For this purpose, there exist two functions:
   getColumns(...)
 
 The first one returns just one column at a time. The second one returns
-a list of solumns.
+a list of columns.
 
 So, here are some examples of how to use both:
 
