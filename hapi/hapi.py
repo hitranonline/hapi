@@ -4117,7 +4117,7 @@ The syntax is as follows: partitionSum(M,I,T), where M,I - standard
 HITRAN molecule-isotopologue notation, T - definition of temperature
 range.
 
-Usecase 1: temperatuer is defined by a list:
+Usecase 1: temperature is defined by a list:
 >>> Q = partitionSum(1,1,[70,80,90])
 
 Usecase 2: temperature is defined by bounds and the step:
