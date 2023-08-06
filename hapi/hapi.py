@@ -4682,7 +4682,7 @@ def abundance(M,I):
         Abundance: natural abundance
     ---
     DESCRIPTION:
-        Return natural (Earth) abundance of HITRAN isotolopogue.
+        Return natural (Earth) abundance of HITRAN isotopologue.
     ---
     EXAMPLE OF USAGE:
         ab = abundance(1,1) # H2O
@@ -4703,7 +4703,7 @@ def molecularMass(M,I):
         MolMass: molecular mass
     ---
     DESCRIPTION:
-        Return molecular mass of HITRAN isotolopogue.
+        Return molecular mass of HITRAN isotopologue.
     ---
     EXAMPLE OF USAGE:
         mass = molecularMass(1,1) # H2O
@@ -4744,7 +4744,7 @@ def isotopologueName(M,I):
         IsoMass: isotopologue mass
     ---
     DESCRIPTION:
-        Return name of HITRAN isotolopogue.
+        Return name of HITRAN isotopologue.
     ---
     EXAMPLE OF USAGE:
         isoname = isotopologueName(1,1) # H2O
