@@ -4527,7 +4527,7 @@ Calculate and plot difference between Voigt and Lorentzian lineshape:
 >>> legend(['Voigt','Lorentz'])   # show legend
 >>> title('Voigt and Lorentz profiles')   # show title
 >>> subplot(2,1,2)   # lower panel
->>> plot(wn,diff)   # plot diffenence
+>>> plot(wn,diff)   # plot difference
 >>> title('Voigt-Lorentz residual')   # show title
 >>> show()   # show all figures
 
