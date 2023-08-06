@@ -4494,7 +4494,7 @@ So, let's calculate plot the basic entities which ar provided by HAPI.
 To do so, we will do all necessary steps to download, filter and 
 calculate cross sections "from scratch". To demonstrate the different
 possibilities of matplotlib, we will mostly use Pylab - a part of 
-Matplotlib with the interface similar to Matlab. Please note, that it's 
+Matplotlib with the interface similar to MATLAB. Please note, that it's 
 not the only way to use Matplotlib. More information can be found on it's site.
 
 The next part is a step-by-step guide, demonstrating basic possilities
