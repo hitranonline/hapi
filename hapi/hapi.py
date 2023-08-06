@@ -35503,7 +35503,7 @@ def absorptionCoefficient_Generic(Components=None,SourceTables=None,partitionFun
             # filter by molecule and isotopologue
             if (TRANS['molec_id'],TRANS['local_iso_id']) not in ABUNDANCES: continue
                 
-            #   FILTER by LineIntensity: compare it with IntencityThreshold
+            #   FILTER by LineIntensity: compare it with IntensityThreshold
             TRANS['SigmaT']     = partitionFunction(TRANS['molec_id'],TRANS['local_iso_id'],TRANS['T'])
             TRANS['SigmaT_ref'] = partitionFunction(TRANS['molec_id'],TRANS['local_iso_id'],TRANS['T_ref'])
             LineIntensity = calculate_parameter_Sw(None,TRANS)
