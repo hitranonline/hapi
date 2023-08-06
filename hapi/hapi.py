@@ -67,7 +67,7 @@ HAPI_HISTORY = [
 'FIXED A "LONELY HEADER" BUG IN CACHE2STORAGE (ver. 1.1.0.7.1)',
 'ADDED SUPPORT FOR PHOSGENE AND CYANOGEN (ver. 1.1.0.7.2)',
 'OPTIMIZED STORAGE2CACHE (by Nils-Holger Loeber) (ver. 1.1.0.7.3)',
-'ADDED SKIPABLE PARAMETERS IN HEADERS (ver. 1.1.0.7.4)',
+'ADDED SKIPPABLE PARAMETERS IN HEADERS (ver. 1.1.0.7.4)',
 'ADDED SUPPORT FOR FORTRAN D-NOTATION (ver. 1.1.0.7.5)',
 'ADDED SUPPORT FOR WEIRD-FORMATTED INTENSITY VALUES E.G. "2.700-164" (ver. 1.1.0.7.6)',
 'ADDED TIPS-2017 (ver. 1.1.0.8)',
@@ -880,10 +880,10 @@ def formatString(par_format,par_value,lang='FORTRAN'):
     #  %M.NP
     #        M - total field length (optional)
     #             (minus sign included in M)
-    #        . - decimal ceparator (optional)
+    #        . - decimal separator (optional)
     #        N - number of digits after . (optional)
     #        P - [dfs] int/float/string
-    # PYTHON RULE: if N is abcent, default value is 6
+    # PYTHON RULE: if N is absent, default value is 6
     regex = FORMAT_PYTHON_REGEX
     (lng,trail,lngpnt,ty) = re.search(regex,par_format).groups()
     if type(par_value) is np.ma.core.MaskedConstant:
@@ -1806,7 +1806,7 @@ def checkRowObject(RowObject,Conditions,VarDictionary):
 
 
 # ----------------------------------------------------
-# PARAMETER NAMES (includeing creation of new ones)
+# PARAMETER NAMES (including creation of new ones)
 # ----------------------------------------------------
 
 # Bind an expression to a new parameter
@@ -1825,12 +1825,12 @@ def operationBIND(parname,Expression,VarDictionary):
 # For parsing use the function evaluateExpression
 
 # Get names from expression.
-#  Must merge this one with evaluateExrpression.
+#  Must merge this one with evaluateExpression.
 # This is VERY LIMITED version of what will be 
 #  when make the language parser is implemented.
 # For more ideas and info see LANGUAGE_REFERENCE
 
-# more advansed version of expression evaluator
+# more advanced version of expression evaluator
 def evaluateExpressionPAR(ParameterNames,VarDictionary=None):
     # RETURN: 1) Upper-level Expression names
     #         2) Upper-level Expression values
@@ -2181,7 +2181,7 @@ def select(TableName,DestinationTableName=QUERY_BUFFER,ParameterNames=None,Condi
         TableName:            name of source table              (required)
         DestinationTableName: name of resulting table           (optional)
         ParameterNames:       list of parameters or expressions (optional)
-        Conditions:           list of logincal expressions      (optional)
+        Conditions:           list of logical expressions       (optional)
         Output:   enable (True) or suppress (False) text output (optional)
         File:     enable (True) or suppress (False) file output (optional)
     OUTPUT PARAMETERS: 
@@ -2263,7 +2263,7 @@ def compareLESS(RowObject1,RowObject2,ParameterNames):
     Flag = row1 < row2
     return Flag
 
-def quickSort(index,TableName,ParameterNames,Accending=True):
+def quickSort(index,TableName,ParameterNames,Ascending=True):
     # ParameterNames: names of parameters which are
     #  taking part in the sorting
     if index == []:
@@ -2279,21 +2279,21 @@ def quickSort(index,TableName,ParameterNames,Accending=True):
               lesser_index += [RowID]
            else:
               greater_index += [RowID]
-       lesser = quickSort(lesser_index,TableName,ParameterNames,Accending)
-       greater = quickSort(greater_index,TableName,ParameterNames,Accending)
-       if Accending:
+       lesser = quickSort(lesser_index,TableName,ParameterNames,Ascending)
+       greater = quickSort(greater_index,TableName,ParameterNames,Ascending)
+       if Ascending:
           return lesser + [PivotID] + greater
        else:
           return greater + [PivotID] + lesser
 
 # Sorting must work well on the table itself!
-def sort(TableName,DestinationTableName=None,ParameterNames=None,Accending=True,Output=False,File=None):
+def sort(TableName,DestinationTableName=None,ParameterNames=None,Ascending=True,Output=False,File=None):
     """
     INPUT PARAMETERS: 
         TableName:                name of source table          (required)
         DestinationTableName:     name of resulting table       (optional)
         ParameterNames:       list of parameters or expressions to sort by    (optional)
-        Accending:       sort in ascending (True) or descending (False) order (optional)
+        Ascending:       sort in ascending (True) or descending (False) order (optional)
         Output:   enable (True) or suppress (False) text output (optional)
         File:     enable (True) or suppress (False) file output (optional)
     OUTPUT PARAMETERS: 
@@ -2316,7 +2316,7 @@ def sort(TableName,DestinationTableName=None,ParameterNames=None,Accending=True,
        ParameterNames = LOCAL_TABLE_CACHE[TableName]['header']['order']
     elif type(ParameterNames) not in set([list,tuple]):
        ParameterNames = [ParameterNames] # fix of stupid bug where ('p1',) != ('p1')
-    index_sorted = quickSort(index,TableName,ParameterNames,Accending)
+    index_sorted = quickSort(index,TableName,ParameterNames,Ascending)
     arrangeTable(TableName,DestinationTableName,index_sorted)
     if Output:
        outputTable(DestinationTableName,File=File)
@@ -2346,7 +2346,7 @@ def group(TableName,DestinationTableName=QUERY_BUFFER,ParameterNames=None,GroupP
         DestinationTableName:     name of resulting table       (optional)
         ParameterNames:       list of parameters or expressions to take       (optional)
         GroupParameterNames:  list of parameters or expressions to group by   (optional)
-        Accending:       sort in ascending (True) or descending (False) order (optional)
+        Ascending:       sort in ascending (True) or descending (False) order (optional)
         Output:   enable (True) or suppress (False) text output (optional)
     OUTPUT PARAMETERS: 
         none
@@ -2463,7 +2463,7 @@ def extractColumns(TableName,SourceParameterName,ParameterFormats,ParameterNames
     # if ParameterNames is empty, fill it with #1-2-3-...
     if not ParameterNames:
        ParameterNames = []
-       # using naming convension #i, i=0,1,2,3...
+       # using naming convention #i, i=0,1,2,3...
        for par_format in ParameterFormats:
            while True:
                  i+=1
@@ -2891,7 +2891,7 @@ def getLinelist(local_name,query,api_key):
 
 # -------------------------------------------------------------------
 # -------------------------------------------------------------------
-# / GLOBABL API FUNCTIONS
+# / GLOBAL API FUNCTIONS
 # -------------------------------------------------------------------
 # -------------------------------------------------------------------
 
@@ -3584,7 +3584,7 @@ True
 EPILOGUE
 
 This tutorial is not meant to be an exhaustive list of all (or even a subset) of Python. 
-Python has a vast array of libraries and much much more functionality which you will 
+Python has a vast array of libraries and much, much more functionality which you will 
 have to discover through other means, such as the excellent book Dive into Python. 
 I hope I have made your transition in Python easier. Please leave comments if you believe 
 there is something that could be improved or added or if there is anything else 
@@ -3681,7 +3681,7 @@ For retrieving the data to the local database, user have to specify the followin
 3) Wavenumber range (nu_min and nu_max)
 
 N.B. If you specify the name which already exists in the database, 
-the existing table with that name will be overrided. 
+the existing table with that name will be overridden. 
 
 To get additional information on function fetch,
 call getHelp:
@@ -3756,7 +3756,7 @@ Table type: column-fixed
                  gpp                %7.1f
 -----------------------------------------
 
-This output tells how many rows are currenty in the table H2O, which 
+This output tells how many rows are currently in the table H2O, which 
 wavenumber range was used by fetch(). Also this gives a basic information 
 about parameters stored in the table.
 
@@ -3812,7 +3812,7 @@ The usage of ParameterNames is outlined below in the section "Specifying a list
 of parameters". So far it worth mentioning that this parameter is a part 
 of a powerful tool for displaying and processing tables from database.
 
-In the next section we will show how to create quieries 
+In the next section we will show how to create queries 
 with more complex conditions.
 
 
@@ -3863,7 +3863,7 @@ Search all matches:  'FINDALL':                 ('FINDALL','\d','1 2 3 4 5')
 Count within group:  'COUNT' :                  ('COUNT','local_iso_id')
 ---------------------------------------------------------------------------------
    
-Let's create a query with more complex condition. Suppese that we are 
+Let's create a query with more complex condition. Suppose that we are 
 interested in all lines between 3500 and 4000 with 1e-19 intensity cutoff.
 The query will look like this:
 
@@ -3889,7 +3889,7 @@ For this purpose, there exist two functions:
   getColumns(...)
 
 The first one returns just one column at a time. The second one returns
-a list of solumns.
+a list of columns.
 
 So, here are some examples of how to use both:
 
@@ -4033,7 +4033,7 @@ Several lineshape (line profile) families are currently available:
 6) Speed-dependent Rautian profile
 7) HT profile (Hartmann-Tran)
 
-Each profile has it's own uniwue set of parameters. Normally one should
+Each profile has it's own unique set of parameters. Normally one should
 use profile parameters only in conjunction with their "native" profiles.
 
 So, let's start exploring the available profiles using getHelp:
@@ -4085,7 +4085,7 @@ HT, all other profiles return just one entity (the real part).
 As it was mentioned in the preface to this tutorial, the partition sums
 are taken from the TIPS-2011 (the link is given above). Partition sums 
 are taken for those isotopologues, which are present in HITRAN and in
-TIPS-2011 simultaneousely.
+TIPS-2011 simultaneously.
 
 N.B. Partition sums are omitted for the following isotopologues which
 are in HITRAN at the moment:
@@ -4117,11 +4117,11 @@ The syntax is as follows: partitionSum(M,I,T), where M,I - standard
 HITRAN molecule-isotopologue notation, T - definition of temperature
 range.
 
-Usecase 1: temperatuer is defined by a list:
+Usecase 1: temperature is defined by a list:
 >>> Q = partitionSum(1,1,[70,80,90])
 
 Usecase 2: temperature is defined by bounds and the step:
->>> T,Q = partiionSum(1,1,[70,3000],step=1.0)
+>>> T,Q = partitionSum(1,1,[70,3000],step=1.0)
 
 In the latter example we calculate a partition sum on a range of
 temperatures from 70K to 3000K using a step 1.0 K, and having arrays 
@@ -4145,7 +4145,7 @@ an instrument properties (apparatus function, resolution, path length etc...)
 
 As it well known, the spectral functions such as absorption,
 transmittance, and radiance spectra, are calculated on the basis
-of the absorption coefficient. By that resaon, absorption coefficient
+of the absorption coefficient. By that reason, absorption coefficient
 is the most important part of simulating a cross section. This part of
 tutorial is devoted to demonstration how to calculate absorption 
 coefficient from the HITRAN line-by-line data. Here we give a brief 
@@ -4228,10 +4228,10 @@ Components:    (optional parameter)
 partitionFunction:    (optional parameter)
 
   Instance of partition function of the following format:
-  Func(M,I,T), where Func - numae of function, (M,I) - HITRAN numbers
+  Func(M,I,T), where Func - name of function, (M,I) - HITRAN numbers
   for molecule and isotopologue, T - temperature.
   Function must return only one output - value of partition sum.
-  NOTE: Deafult value is PYTIPS - python version of TIPS-2011
+  NOTE: Default value is PYTIPS - python version of TIPS-2011
 
 Environment:    (optional parameter)
 
@@ -4244,8 +4244,8 @@ Environment:    (optional parameter)
 WavenumberRange:    (optional parameter)
 
   List containing minimum and maximum value of wavenumber to consider
-  in cross-section calculation. All lines that are out of htese bounds
-  will be skipped. The firmat is as follows: WavenumberRange=[wn_low,wn_high]
+  in cross-section calculation. All lines that are out of these bounds
+  will be skipped. The format is as follows: WavenumberRange=[wn_low,wn_high]
   NOTE: If this parameter os skipped, then min and max are taken 
   from the data from SourceTables. Deprecated name is OmegaRange.
 
@@ -4287,10 +4287,10 @@ GammaL:    (optional parameter)
 
 HITRAN_units:    (optional parameter)
 
-  Logical flag for units, in which the absorption coefficient shoould be 
-  calculated. Currently, the choises are: cm^2/molec (if True) and
+  Logical flag for units, in which the absorption coefficient should be 
+  calculated. Currently, the choices are: cm^2/molec (if True) and
   cm-1 (if False).
-  NOTE: to calculate other spectral functions like transmitance,
+  NOTE: to calculate other spectral functions like transmittance,
   radiance and absorption spectra, user should set HITRAN_units to False.
 
 File:    (optional parameter)
@@ -4315,7 +4315,7 @@ identical parameter sets so the description is the same for each function.
 ///////////////////////////////////////////////////////////////////
 
 Let's calculate an absorption, transmittance, and radiance
-spectra on the basis of apsorption coefficient. In order to be consistent
+spectra on the basis of absorption coefficient. In order to be consistent
 with internal API's units, we need to have an absorption coefficient cm-1:
 
 >>> nu,coef = absorptionCoefficient_Lorentz(SourceTables='CO2',HITRAN_units=False)
@@ -4395,11 +4395,11 @@ To get a description of each instrumental function we can use getHelp():
   
 For instance,
 >>> getHelp(SLIT_MICHELSON)
-... will give a datailed info about Michelson's instrumental function.
+... will give a detailed info about Michelson's instrumental function.
 
 
-The function convolveSpectrum() convolutes a high-resulution spectrum
-with one of supplied instrumental (slit) functions. The folowing 
+The function convolveSpectrum() convolutes a high-resolution spectrum
+with one of supplied instrumental (slit) functions. The following 
 parameters of this function are provided:
 
 Wavenumber     (required parameter)
@@ -4435,7 +4435,7 @@ Before using the convolution procedure it worth giving some practical
 advices and remarks: 
 1) Quality of a convolution depends on many things: quality of calculated 
 spectra, width of AF_wing and WavenumberRange, Resolution, WavenumberStep etc ...
-Most of these factors are taken from previus stages of spectral calculation.
+Most of these factors are taken from previous stages of spectral calculation.
 Right choise of all these factors is crucial for the correct computation.
 2) Dispersion, Diffraction and Michelson AF's don't work well in narrow 
 wavenumber range because of their broad wings.
@@ -4494,10 +4494,10 @@ So, let's calculate plot the basic entities which ar provided by HAPI.
 To do so, we will do all necessary steps to download, filter and 
 calculate cross sections "from scratch". To demonstrate the different
 possibilities of matplotlib, we will mostly use Pylab - a part of 
-Matplotlib with the interface similar to Matlab. Please note, that it's 
+Matplotlib with the interface similar to MATLAB. Please note, that it's 
 not the only way to use Matplotlib. More information can be found on it's site.
 
-The next part is a step-by-step guide, demonstrating basic possilities
+The next part is a step-by-step guide, demonstrating basic possibilities
 of HITRANonline API in conjunction with Matplotlib.
 
 First, do some preliminary imports:
@@ -4527,7 +4527,7 @@ Calculate and plot difference between Voigt and Lorentzian lineshape:
 >>> legend(['Voigt','Lorentz'])   # show legend
 >>> title('Voigt and Lorentz profiles')   # show title
 >>> subplot(2,1,2)   # lower panel
->>> plot(wn,diff)   # plot diffenence
+>>> plot(wn,diff)   # plot difference
 >>> title('Voigt-Lorentz residual')   # show title
 >>> show()   # show all figures
 
@@ -4679,10 +4679,10 @@ def abundance(M,I):
         M: HITRAN molecule number
         I: HITRAN isotopologue number
     OUTPUT PARAMETERS: 
-        Abbundance: natural abundance
+        Abundance: natural abundance
     ---
     DESCRIPTION:
-        Return natural (Earth) abundance of HITRAN isotolopogue.
+        Return natural (Earth) abundance of HITRAN isotopologue.
     ---
     EXAMPLE OF USAGE:
         ab = abundance(1,1) # H2O
@@ -4703,7 +4703,7 @@ def molecularMass(M,I):
         MolMass: molecular mass
     ---
     DESCRIPTION:
-        Return molecular mass of HITRAN isotolopogue.
+        Return molecular mass of HITRAN isotopologue.
     ---
     EXAMPLE OF USAGE:
         mass = molecularMass(1,1) # H2O
@@ -4744,7 +4744,7 @@ def isotopologueName(M,I):
         IsoMass: isotopologue mass
     ---
     DESCRIPTION:
-        Return name of HITRAN isotolopogue.
+        Return name of HITRAN isotopologue.
     ---
     EXAMPLE OF USAGE:
         isoname = isotopologueName(1,1) # H2O
@@ -34112,7 +34112,7 @@ def volumeConcentration(p,T):
 
 # ------------------------------- PARAMETER DEPENDENCIES --------------------------------
 
-# THE LOGIC OF THIS SECTION IS THAT NOTHING (OR AT LEAST MINUMUM) SHOULD BE HARD-CODED INTO THE GENERIC ABSCOEF ROUTINES
+# THE LOGIC OF THIS SECTION IS THAT NOTHING (OR AT LEAST MINIMUM) SHOULD BE HARD-CODED INTO THE GENERIC ABSCOEF ROUTINES
 # TRYING TO AVOID THE OBJECT ORIENTED APPROACH HERE IN ORDER TO CORRESPOND TO THE OVERALL STYLE OF THE PACKAGE
 
 def ladder(parname,species,envdep_presets,TRANS,flag_exception=False): # priority search for the parameters
@@ -35256,7 +35256,7 @@ def EnvironmentDependency_Eta(EtaDB,Gamma0,Shift0,Diluent,C):  # C=>CONTEXT
     
 # ------------------------------- /PARAMETER DEPENDENCIES --------------------------------
 
-# ------------------------------- BINGINGS --------------------------------
+# ------------------------------- BINDINGS --------------------------------
 
 # default parameter bindings
 DefaultParameterBindings = {}
@@ -35264,7 +35264,7 @@ DefaultParameterBindings = {}
 # default temperature dependencies
 DefaultEnvironmentDependencyBindings = {}
 
-# ------------------------------- /BINGINGS --------------------------------
+# ------------------------------- /BINDINGS --------------------------------
 
 # default values for intensity threshold
 DefaultIntensityThreshold = 0. # cm*molec
@@ -35292,7 +35292,7 @@ def getDefaultValuesForXsect(Components,SourceTables,Environment,OmegaRange,
     if Components == [None]:
         CompDict = {}
         for TableName in SourceTables:
-            # check table existance
+            # check table existence
             if TableName not in LOCAL_TABLE_CACHE.keys():
                 raise Exception('%s: no such table. Check tableList() for more info.' % TableName)
             mol_ids = LOCAL_TABLE_CACHE[TableName]['data']['molec_id']
@@ -35503,7 +35503,7 @@ def absorptionCoefficient_Generic(Components=None,SourceTables=None,partitionFun
             # filter by molecule and isotopologue
             if (TRANS['molec_id'],TRANS['local_iso_id']) not in ABUNDANCES: continue
                 
-            #   FILTER by LineIntensity: compare it with IntencityThreshold
+            #   FILTER by LineIntensity: compare it with IntensityThreshold
             TRANS['SigmaT']     = partitionFunction(TRANS['molec_id'],TRANS['local_iso_id'],TRANS['T'])
             TRANS['SigmaT_ref'] = partitionFunction(TRANS['molec_id'],TRANS['local_iso_id'],TRANS['T_ref'])
             LineIntensity = calculate_parameter_Sw(None,TRANS)
