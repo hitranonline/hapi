@@ -4398,7 +4398,7 @@ For instance,
 ... will give a detailed info about Michelson's instrumental function.
 
 
-The function convolveSpectrum() convolutes a high-resulution spectrum
+The function convolveSpectrum() convolutes a high-resolution spectrum
 with one of supplied instrumental (slit) functions. The following 
 parameters of this function are provided:
 
