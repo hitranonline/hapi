@@ -4679,7 +4679,7 @@ def abundance(M,I):
         M: HITRAN molecule number
         I: HITRAN isotopologue number
     OUTPUT PARAMETERS: 
-        Abbundance: natural abundance
+        Abundance: natural abundance
     ---
     DESCRIPTION:
         Return natural (Earth) abundance of HITRAN isotolopogue.
