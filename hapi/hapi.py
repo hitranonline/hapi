@@ -35256,7 +35256,7 @@ def EnvironmentDependency_Eta(EtaDB,Gamma0,Shift0,Diluent,C):  # C=>CONTEXT
     
 # ------------------------------- /PARAMETER DEPENDENCIES --------------------------------
 
-# ------------------------------- BINGINGS --------------------------------
+# ------------------------------- BINDINGS --------------------------------
 
 # default parameter bindings
 DefaultParameterBindings = {}
@@ -35264,7 +35264,7 @@ DefaultParameterBindings = {}
 # default temperature dependencies
 DefaultEnvironmentDependencyBindings = {}
 
-# ------------------------------- /BINGINGS --------------------------------
+# ------------------------------- /BINDINGS --------------------------------
 
 # default values for intensity threshold
 DefaultIntensityThreshold = 0. # cm*molec
