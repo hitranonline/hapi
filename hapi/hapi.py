@@ -883,7 +883,7 @@ def formatString(par_format,par_value,lang='FORTRAN'):
     #        . - decimal ceparator (optional)
     #        N - number of digits after . (optional)
     #        P - [dfs] int/float/string
-    # PYTHON RULE: if N is abcent, default value is 6
+    # PYTHON RULE: if N is absent, default value is 6
     regex = FORMAT_PYTHON_REGEX
     (lng,trail,lngpnt,ty) = re.search(regex,par_format).groups()
     if type(par_value) is np.ma.core.MaskedConstant:
