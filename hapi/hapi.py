@@ -4315,7 +4315,7 @@ identical parameter sets so the description is the same for each function.
 ///////////////////////////////////////////////////////////////////
 
 Let's calculate an absorption, transmittance, and radiance
-spectra on the basis of apsorption coefficient. In order to be consistent
+spectra on the basis of absorption coefficient. In order to be consistent
 with internal API's units, we need to have an absorption coefficient cm-1:
 
 >>> nu,coef = absorptionCoefficient_Lorentz(SourceTables='CO2',HITRAN_units=False)
