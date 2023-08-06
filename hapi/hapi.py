@@ -4399,7 +4399,7 @@ For instance,
 
 
 The function convolveSpectrum() convolutes a high-resulution spectrum
-with one of supplied instrumental (slit) functions. The folowing 
+with one of supplied instrumental (slit) functions. The following 
 parameters of this function are provided:
 
 Wavenumber     (required parameter)
