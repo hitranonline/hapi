@@ -2263,7 +2263,7 @@ def compareLESS(RowObject1,RowObject2,ParameterNames):
     Flag = row1 < row2
     return Flag
 
-def quickSort(index,TableName,ParameterNames,Accending=True):
+def quickSort(index,TableName,ParameterNames,Ascending=True):
     # ParameterNames: names of parameters which are
     #  taking part in the sorting
     if index == []:
@@ -2279,21 +2279,21 @@ def quickSort(index,TableName,ParameterNames,Accending=True):
               lesser_index += [RowID]
            else:
               greater_index += [RowID]
-       lesser = quickSort(lesser_index,TableName,ParameterNames,Accending)
-       greater = quickSort(greater_index,TableName,ParameterNames,Accending)
-       if Accending:
+       lesser = quickSort(lesser_index,TableName,ParameterNames,Ascending)
+       greater = quickSort(greater_index,TableName,ParameterNames,Ascending)
+       if Ascending:
           return lesser + [PivotID] + greater
        else:
           return greater + [PivotID] + lesser
 
 # Sorting must work well on the table itself!
-def sort(TableName,DestinationTableName=None,ParameterNames=None,Accending=True,Output=False,File=None):
+def sort(TableName,DestinationTableName=None,ParameterNames=None,Ascending=True,Output=False,File=None):
     """
     INPUT PARAMETERS: 
         TableName:                name of source table          (required)
         DestinationTableName:     name of resulting table       (optional)
         ParameterNames:       list of parameters or expressions to sort by    (optional)
-        Accending:       sort in ascending (True) or descending (False) order (optional)
+        Ascending:       sort in ascending (True) or descending (False) order (optional)
         Output:   enable (True) or suppress (False) text output (optional)
         File:     enable (True) or suppress (False) file output (optional)
     OUTPUT PARAMETERS: 
@@ -2316,7 +2316,7 @@ def sort(TableName,DestinationTableName=None,ParameterNames=None,Accending=True,
        ParameterNames = LOCAL_TABLE_CACHE[TableName]['header']['order']
     elif type(ParameterNames) not in set([list,tuple]):
        ParameterNames = [ParameterNames] # fix of stupid bug where ('p1',) != ('p1')
-    index_sorted = quickSort(index,TableName,ParameterNames,Accending)
+    index_sorted = quickSort(index,TableName,ParameterNames,Ascending)
     arrangeTable(TableName,DestinationTableName,index_sorted)
     if Output:
        outputTable(DestinationTableName,File=File)
@@ -2346,7 +2346,7 @@ def group(TableName,DestinationTableName=QUERY_BUFFER,ParameterNames=None,GroupP
         DestinationTableName:     name of resulting table       (optional)
         ParameterNames:       list of parameters or expressions to take       (optional)
         GroupParameterNames:  list of parameters or expressions to group by   (optional)
-        Accending:       sort in ascending (True) or descending (False) order (optional)
+        Ascending:       sort in ascending (True) or descending (False) order (optional)
         Output:   enable (True) or suppress (False) text output (optional)
     OUTPUT PARAMETERS: 
         none
