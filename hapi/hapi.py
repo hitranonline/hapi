@@ -4497,7 +4497,7 @@ possibilities of matplotlib, we will mostly use Pylab - a part of
 Matplotlib with the interface similar to MATLAB. Please note, that it's 
 not the only way to use Matplotlib. More information can be found on it's site.
 
-The next part is a step-by-step guide, demonstrating basic possilities
+The next part is a step-by-step guide, demonstrating basic possibilities
 of HITRANonline API in conjunction with Matplotlib.
 
 First, do some preliminary imports:
