@@ -4145,7 +4145,7 @@ an instrument properties (apparatus function, resolution, path length etc...)
 
 As it well known, the spectral functions such as absorption,
 transmittance, and radiance spectra, are calculated on the basis
-of the absorption coefficient. By that resaon, absorption coefficient
+of the absorption coefficient. By that reason, absorption coefficient
 is the most important part of simulating a cross section. This part of
 tutorial is devoted to demonstration how to calculate absorption 
 coefficient from the HITRAN line-by-line data. Here we give a brief 
