@@ -4085,7 +4085,7 @@ HT, all other profiles return just one entity (the real part).
 As it was mentioned in the preface to this tutorial, the partition sums
 are taken from the TIPS-2011 (the link is given above). Partition sums 
 are taken for those isotopologues, which are present in HITRAN and in
-TIPS-2011 simultaneousely.
+TIPS-2011 simultaneously.
 
 N.B. Partition sums are omitted for the following isotopologues which
 are in HITRAN at the moment:
