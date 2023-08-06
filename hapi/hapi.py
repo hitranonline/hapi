@@ -3863,7 +3863,7 @@ Search all matches:  'FINDALL':                 ('FINDALL','\d','1 2 3 4 5')
 Count within group:  'COUNT' :                  ('COUNT','local_iso_id')
 ---------------------------------------------------------------------------------
    
-Let's create a query with more complex condition. Suppese that we are 
+Let's create a query with more complex condition. Suppose that we are 
 interested in all lines between 3500 and 4000 with 1e-19 intensity cutoff.
 The query will look like this:
 
