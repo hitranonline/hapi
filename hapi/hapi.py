@@ -4435,7 +4435,7 @@ Before using the convolution procedure it worth giving some practical
 advices and remarks: 
 1) Quality of a convolution depends on many things: quality of calculated 
 spectra, width of AF_wing and WavenumberRange, Resolution, WavenumberStep etc ...
-Most of these factors are taken from previus stages of spectral calculation.
+Most of these factors are taken from previous stages of spectral calculation.
 Right choise of all these factors is crucial for the correct computation.
 2) Dispersion, Diffraction and Michelson AF's don't work well in narrow 
 wavenumber range because of their broad wings.
