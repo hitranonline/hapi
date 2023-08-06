@@ -1825,7 +1825,7 @@ def operationBIND(parname,Expression,VarDictionary):
 # For parsing use the function evaluateExpression
 
 # Get names from expression.
-#  Must merge this one with evaluateExrpression.
+#  Must merge this one with evaluateExpression.
 # This is VERY LIMITED version of what will be 
 #  when make the language parser is implemented.
 # For more ideas and info see LANGUAGE_REFERENCE
