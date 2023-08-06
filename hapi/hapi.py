@@ -4395,7 +4395,7 @@ To get a description of each instrumental function we can use getHelp():
   
 For instance,
 >>> getHelp(SLIT_MICHELSON)
-... will give a datailed info about Michelson's instrumental function.
+... will give a detailed info about Michelson's instrumental function.
 
 
 The function convolveSpectrum() convolutes a high-resulution spectrum
