@@ -1806,7 +1806,7 @@ def checkRowObject(RowObject,Conditions,VarDictionary):
 
 
 # ----------------------------------------------------
-# PARAMETER NAMES (includeing creation of new ones)
+# PARAMETER NAMES (including creation of new ones)
 # ----------------------------------------------------
 
 # Bind an expression to a new parameter
