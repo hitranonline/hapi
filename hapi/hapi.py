@@ -1830,7 +1830,7 @@ def operationBIND(parname,Expression,VarDictionary):
 #  when make the language parser is implemented.
 # For more ideas and info see LANGUAGE_REFERENCE
 
-# more advansed version of expression evaluator
+# more advanced version of expression evaluator
 def evaluateExpressionPAR(ParameterNames,VarDictionary=None):
     # RETURN: 1) Upper-level Expression names
     #         2) Upper-level Expression values
