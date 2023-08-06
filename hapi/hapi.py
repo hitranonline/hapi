@@ -4287,7 +4287,7 @@ GammaL:    (optional parameter)
 
 HITRAN_units:    (optional parameter)
 
-  Logical flag for units, in which the absorption coefficient shoould be 
+  Logical flag for units, in which the absorption coefficient should be 
   calculated. Currently, the choices are: cm^2/molec (if True) and
   cm-1 (if False).
   NOTE: to calculate other spectral functions like transmitance,
