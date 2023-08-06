@@ -880,7 +880,7 @@ def formatString(par_format,par_value,lang='FORTRAN'):
     #  %M.NP
     #        M - total field length (optional)
     #             (minus sign included in M)
-    #        . - decimal ceparator (optional)
+    #        . - decimal separator (optional)
     #        N - number of digits after . (optional)
     #        P - [dfs] int/float/string
     # PYTHON RULE: if N is absent, default value is 6
