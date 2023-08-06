@@ -3584,7 +3584,7 @@ True
 EPILOGUE
 
 This tutorial is not meant to be an exhaustive list of all (or even a subset) of Python. 
-Python has a vast array of libraries and much much more functionality which you will 
+Python has a vast array of libraries and much, much more functionality which you will 
 have to discover through other means, such as the excellent book Dive into Python. 
 I hope I have made your transition in Python easier. Please leave comments if you believe 
 there is something that could be improved or added or if there is anything else 
