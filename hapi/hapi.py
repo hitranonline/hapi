@@ -3812,7 +3812,7 @@ The usage of ParameterNames is outlined below in the section "Specifying a list
 of parameters". So far it worth mentioning that this parameter is a part 
 of a powerful tool for displaying and processing tables from database.
 
-In the next section we will show how to create quieries 
+In the next section we will show how to create queries 
 with more complex conditions.
 
 
