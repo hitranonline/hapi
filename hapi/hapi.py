@@ -4033,7 +4033,7 @@ Several lineshape (line profile) families are currently available:
 6) Speed-dependent Rautian profile
 7) HT profile (Hartmann-Tran)
 
-Each profile has it's own uniwue set of parameters. Normally one should
+Each profile has it's own unique set of parameters. Normally one should
 use profile parameters only in conjunction with their "native" profiles.
 
 So, let's start exploring the available profiles using getHelp:
