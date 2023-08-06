@@ -35292,7 +35292,7 @@ def getDefaultValuesForXsect(Components,SourceTables,Environment,OmegaRange,
     if Components == [None]:
         CompDict = {}
         for TableName in SourceTables:
-            # check table existance
+            # check table existence
             if TableName not in LOCAL_TABLE_CACHE.keys():
                 raise Exception('%s: no such table. Check tableList() for more info.' % TableName)
             mol_ids = LOCAL_TABLE_CACHE[TableName]['data']['molec_id']
