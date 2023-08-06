@@ -3756,7 +3756,7 @@ Table type: column-fixed
                  gpp                %7.1f
 -----------------------------------------
 
-This output tells how many rows are currenty in the table H2O, which 
+This output tells how many rows are currently in the table H2O, which 
 wavenumber range was used by fetch(). Also this gives a basic information 
 about parameters stored in the table.
 
