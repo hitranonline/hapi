@@ -4244,7 +4244,7 @@ Environment:    (optional parameter)
 WavenumberRange:    (optional parameter)
 
   List containing minimum and maximum value of wavenumber to consider
-  in cross-section calculation. All lines that are out of htese bounds
+  in cross-section calculation. All lines that are out of these bounds
   will be skipped. The format is as follows: WavenumberRange=[wn_low,wn_high]
   NOTE: If this parameter os skipped, then min and max are taken 
   from the data from SourceTables. Deprecated name is OmegaRange.
