@@ -4228,7 +4228,7 @@ Components:    (optional parameter)
 partitionFunction:    (optional parameter)
 
   Instance of partition function of the following format:
-  Func(M,I,T), where Func - numae of function, (M,I) - HITRAN numbers
+  Func(M,I,T), where Func - name of function, (M,I) - HITRAN numbers
   for molecule and isotopologue, T - temperature.
   Function must return only one output - value of partition sum.
   NOTE: Default value is PYTIPS - python version of TIPS-2011
