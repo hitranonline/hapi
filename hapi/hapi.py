@@ -4121,7 +4121,7 @@ Usecase 1: temperatuer is defined by a list:
 >>> Q = partitionSum(1,1,[70,80,90])
 
 Usecase 2: temperature is defined by bounds and the step:
->>> T,Q = partiionSum(1,1,[70,3000],step=1.0)
+>>> T,Q = partitionSum(1,1,[70,3000],step=1.0)
 
 In the latter example we calculate a partition sum on a range of
 temperatures from 70K to 3000K using a step 1.0 K, and having arrays 
