@@ -3681,7 +3681,7 @@ For retrieving the data to the local database, user have to specify the followin
 3) Wavenumber range (nu_min and nu_max)
 
 N.B. If you specify the name which already exists in the database, 
-the existing table with that name will be overrided. 
+the existing table with that name will be overridden. 
 
 To get additional information on function fetch,
 call getHelp:
