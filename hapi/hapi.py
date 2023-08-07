@@ -4350,7 +4350,7 @@ Environment={'T': 296.0, 'l': 100.0}       (optional parameter)
   This parameter is a bit specific for each of functions:
   For absorptionSpectrum() and transmittanceSpectrum() the default
   value is as follows: Environment={'l': 100.0}
-  For transmittanceSpectrum() the default value, besides path length,
+  For radianceSpectrum() the default value, besides path length,
   contains a temperature: Environment={'T': 296.0, 'l': 100.0}
   NOTE: temperature must be equal to that which was used in 
   absorptionCoefficient_ routine!
