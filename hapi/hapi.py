@@ -4171,6 +4171,9 @@ For doing that, let's have a table downloaded from HITRANonline.
 # get data on CO2 main isotopologue in the range 2000-2100 cm-1
 >>> fetch('CO2',2,1,2000,2100)
 
+Note that CO2 was selected as molecule number 2, isotopologue 1.  The table
+name 'CO2' is arbitrary and does not select a specific molecule.
+
 OK, now we're ready to run a fast example of how to calculate an
 absorption coefficient cross section:
 
