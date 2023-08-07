@@ -4117,7 +4117,7 @@ The syntax is as follows: partitionSum(M,I,T), where M,I - standard
 HITRAN molecule-isotopologue notation, T - definition of temperature
 range.
 
-Usecase 1: temperatuer is defined by a list:
+Usecase 1: temperature is defined by a list:
 >>> Q = partitionSum(1,1,[70,80,90])
 
 Usecase 2: temperature is defined by bounds and the step:
@@ -4282,7 +4282,7 @@ GammaL:    (optional parameter)
 
   This is the name of broadening parameter to consider a "Lorentzian"
   part in the Voigt profile. In the current 160-char format there is 
-  a choise between "gamma_air" and "gamma_self".
+  a choice between "gamma_air" and "gamma_self".
   NOTE: If the table has custom columns with a broadening coefficients,
         the user can specify the name of this column in GammaL. This
         would let the function calculate an absorption with custom
@@ -4291,7 +4291,7 @@ GammaL:    (optional parameter)
 HITRAN_units:    (optional parameter)
 
   Logical flag for units, in which the absorption coefficient shoould be 
-  calculated. Currently, the choises are: cm^2/molec (if True) and
+  calculated. Currently, the choices are: cm^2/molec (if True) and
   cm-1 (if False).
   NOTE: to calculate other spectral functions like transmitance,
   radiance and absorption spectra, user should set HITRAN_units to False.
@@ -4439,7 +4439,7 @@ advices and remarks:
 1) Quality of a convolution depends on many things: quality of calculated 
 spectra, width of AF_wing and WavenumberRange, Resolution, WavenumberStep etc ...
 Most of these factors are taken from previus stages of spectral calculation.
-Right choise of all these factors is crucial for the correct computation.
+Right choice of all these factors is crucial for the correct computation.
 2) Dispersion, Diffraction and Michelson AF's don't work well in narrow 
 wavenumber range because of their broad wings.
 3) Generally one must consider WavenumberRange and AF_wing as wide as possible.
@@ -35359,7 +35359,7 @@ ABSCOEF_DOCSTRING_TEMPLATE = \
         Calculate absorption coefficient using {profile}.
         Absorption coefficient is calculated at arbitrary temperature and pressure.
         User can vary a wide range of parameters to control a process of calculation.
-        The choise of these parameters depends on properties of a particular linelist.
+        The choice of these parameters depends on properties of a particular linelist.
         Default values are a sort of guess which gives a decent precision (on average) 
         for a reasonable amount of cpu time. To increase calculation accuracy,
         user should use a trial and error method.
