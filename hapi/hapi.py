@@ -35376,7 +35376,7 @@ def absorptionCoefficient_Generic(Components=None,SourceTables=None,partitionFun
                                   WavenumberWingHW=None,WavenumberGrid=None,
                                   Diluent={},LineMixingRosen=False,
                                   profile=None,calcpars=None,exclude=set(),
-                                  DEBUG=None):
+                                  DEBUG=None, initial_Xsect=None):
                                                               
     # Throw exception if profile or calcpars are empty.
     if profile is None: raise Exception('user must provide the line profile function')
@@ -35423,7 +35423,7 @@ def absorptionCoefficient_Generic(Components=None,SourceTables=None,partitionFun
         #Omegas = arange(OmegaRange[0],OmegaRange[1],OmegaStep)
         Omegas = arange_(OmegaRange[0],OmegaRange[1],OmegaStep) # fix
     number_of_points = len(Omegas)
-    Xsect = zeros(number_of_points)
+    Xsect = zeros(number_of_points) if initial_Xsect is None else initial_Xsect
        
     # reference temperature and pressure
     T_ref_default = __FloatType__(296.) # K
