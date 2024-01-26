@@ -54,7 +54,7 @@ if 'io' in sys.modules: # define open using Linux-style line endings
 else:
     open_ = open
 
-HAPI_VERSION = '1.2.2.1'; __version__ = HAPI_VERSION
+HAPI_VERSION = '1.2.2.2'; __version__ = HAPI_VERSION
 HAPI_HISTORY = [
 'FIXED GRID BUG (ver. 1.1.0.1)',
 'FIXED OUTPUT FORMAT FOR CROSS-SECTIONS (ver. 1.1.0.1)',
@@ -94,6 +94,7 @@ HAPI_HISTORY = [
 'ADDED CALCULATION OF THE ISO_ID TABLE ON STARTUP (ver. 1.2.1.0)',
 'ADDED SUPPORT FOR TIPS-2021 (ver. 1.2.2.0)',
 'FIXED BUG WITH WAVENUMBERGRID (ver. 1.2.2.1)',
+'FIXED BUG WITH ZEROING OUT LINES WITH NON-STANDARD PARAMETERS (ver. 1.2.2.2)'
 ]
 
 # version header
@@ -887,7 +888,7 @@ def formatString(par_format,par_value,lang='FORTRAN'):
     regex = FORMAT_PYTHON_REGEX
     (lng,trail,lngpnt,ty) = re.search(regex,par_format).groups()
     if type(par_value) is np.ma.core.MaskedConstant:
-        result = '%%%ds' % lng % '#'
+        result = '%%%ss' % lng % '#'
         return result
     result = par_format % par_value
     if ty.lower() in set(['f','e']):
@@ -1116,8 +1117,8 @@ def storage2cache(TableName,cast=True,ext=None,nlines=None,pos=None):
         LOCAL_TABLE_CACHE[TableName]['header']['number_of_rows'] = line_count
     else:
         quantities = header['order']
-        formats = [header['format'][qnt] for qnt in quantities]
-        types = {'d':int, 'f':float, 'E':float, 's':str}
+        formats = [header['format'][qnt].lower() for qnt in quantities]
+        types = {'d':int, 'f':float, 'e':float, 's':str}
         converters = []
         end = 0
         for qnt, fmt in zip(quantities, formats):
@@ -1134,6 +1135,9 @@ def storage2cache(TableName,cast=True,ext=None,nlines=None,pos=None):
             end = start + size
             def cfunc(line, dtype=dtype, start=start, end=end, qnt=qnt):
                 # return dtype(line[start:end]) # this will fail on the float number with D exponent (Fortran notation)
+                if dtype in (float,int): # assign NaN if value is hashtagged
+                    if line[start:end].strip()=='#':
+                        return np.nan
                 if dtype==float:
                     try:
                         return dtype(line[start:end])
@@ -1182,17 +1186,26 @@ def storage2cache(TableName,cast=True,ext=None,nlines=None,pos=None):
             #LOCAL_TABLE_CACHE[TableName]['data'][qnt] = col
         header['number_of_rows'] = line_count = (
             len(LOCAL_TABLE_CACHE[TableName]['data'][quantities[0]]))
-            
+                        
     # Convert all columns to numpy arrays
-    par_names = LOCAL_TABLE_CACHE[TableName]['header']['order']
+    par_names = LOCAL_TABLE_CACHE[TableName]['header']['order'].copy()
     if 'extra' in header and header['extra']:
         par_names += LOCAL_TABLE_CACHE[TableName]['header']['extra']
     for par_name in par_names:
         column = LOCAL_TABLE_CACHE[TableName]['data'][par_name]
         LOCAL_TABLE_CACHE[TableName]['data'][par_name] = np.array(column)                    
             
-    # Additionally: convert numeric arrays in "extra" part of the LOCAL_TABLE_CACHE to masked arrays.
-    # This is done to avoid "nan" values in the arithmetic operations involving these columns.
+    # Additionally: convert numeric arrays of the LOCAL_TABLE_CACHE to masked arrays.
+    # This is done to avoid "nan" values in the arithmetic ope  rations involving these columns.
+    for par_name in LOCAL_TABLE_CACHE[TableName]['header']['order']:
+        par_format = LOCAL_TABLE_CACHE[TableName]['header']['format'][par_name]
+        regex = FORMAT_PYTHON_REGEX
+        (lng,trail,lngpnt,ty) = re.search(regex,par_format).groups()
+        if ty.lower() in ['d','e','f']:
+            column = LOCAL_TABLE_CACHE[TableName]['data'][par_name]
+            colmask = np.isnan(column)
+            LOCAL_TABLE_CACHE[TableName]['data'][par_name] = np.ma.array(column,mask=colmask)
+    
     if 'extra' in header and header['extra']:
         for par_name in LOCAL_TABLE_CACHE[TableName]['header']['extra']:
             par_format = LOCAL_TABLE_CACHE[TableName]['header']['extra_format'][par_name]
@@ -33958,7 +33971,6 @@ def pcqsdhc(sg0,GamD,Gam0,Gam2,Shift0,Shift2,anuVC,eta,sg,Ylm=0.0):
     return LS_pCqSDHC.real + Ylm*LS_pCqSDHC.imag, LS_pCqSDHC.imag
 
 
-
 # ------------------  CROSS-SECTIONS, XSECT.PY --------------------------------
 
 # set interfaces for profiles
@@ -34504,7 +34516,7 @@ def environGetArguments(abstract_parnames,lookup_cases,
             argname_database = CASE[argname_abstract]['name']
             
             try:
-                if argname_database not in TRANS or TRANS[argname_database] is np.ma.core.MaskedConstant:
+                if argname_database not in TRANS or type(TRANS[argname_database]) is np.ma.core.MaskedConstant:
                     if 'default' in CASE[argname_abstract]:
                         source = '<default>'
                         value = CASE[argname_abstract]['default']
@@ -35375,21 +35387,22 @@ def absorptionCoefficient_Generic(Components=None,SourceTables=None,partitionFun
                                   WavenumberRange=None,WavenumberStep=None,WavenumberWing=None,
                                   WavenumberWingHW=None,WavenumberGrid=None,
                                   Diluent={},LineMixingRosen=False,
-                                  profile=None,calcpars=None,exclude=set(),
+                                  profile=None,calcpars=None,exclude=[],
                                   DEBUG=None):
                                                               
     # Throw exception if profile or calcpars are empty.
     if profile is None: raise Exception('user must provide the line profile function')
     if calcpars is None: raise Exception('user must provide the function for calculating profile parameters')
-        
+                
     if DEBUG is not None: 
         VARIABLES['abscoef_debug'] = True
     else:
         VARIABLES['abscoef_debug'] = False
         
+    exclude = set(exclude)
     if not LineMixingRosen: exclude.add('YRosen')
     if not LineShift: exclude.update({'Delta0','Delta2'})
-    
+
     # Parameters OmegaRange,OmegaStep,OmegaWing,OmegaWingHW, and OmegaGrid
     # are deprecated and given for backward compatibility with the older versions.
     if WavenumberRange is not None:  OmegaRange=WavenumberRange
