@@ -34277,70 +34277,129 @@ def calculate_parameter_Eta(envdep_presets,TRANS,CALC_INFO=None):
     """
     Calculate correlation parameter for given Environment and TRANS.
     """
+    #return 0 # DEBUG
     Diluent = TRANS['Diluent']
-    if type(CALC_INFO) is not dict:
-        return 0
+    #if type(CALC_INFO) is not dict:
+    #    return 0
     CALC_INFO['Eta'] = {'mixture':{}}
+    
     Eta = 0
     Gamma2 = CALC_INFO['Gamma2']['value']
     Delta2 = CALC_INFO['Delta2']['value']
+    
     Eta_denom = Gamma2-1j*Delta2
+    
     for species in Diluent:
+        
         abun = Diluent[species]
-        EtaDB = TRANS.get('eta_HT_%s'%species,0)
+        
+        EtaDB_flag = True
+        EtaDB = TRANS.get('eta_HT_%s'%species)
+        if EtaDB is None or type(EtaDB) is np.ma.core.MaskedConstant:
+            EtaDB = 0.0
+            EtaDB_flag = False
+        
         Gamma2T = CALC_INFO['Gamma2']['mixture'][species]['value']
         Delta2T = CALC_INFO['Delta2']['mixture'][species]['value']
-        Eta_species = EtaDB*abun*(Gamma2T-1j*Delta2T)
+        
+        Eta_species = EtaDB*(Gamma2T-1j*Delta2T)
         if Eta_denom!=0: Eta_species/=Eta_denom
+        #Eta_species /= Eta_denom # it is assumed that parameters Gamma2 and Delta2 are non-zero
+        
+        #print('calculate_parameter_Eta=====================')
+        #print('Eta_species>>>',Eta_species,type(Eta_species))
+        #print('EtaDB>>>',EtaDB,type(EtaDB))
+        #print('Gamma2T>>>',Gamma2T,type(Gamma2T))
+        #print('Delta2T>>>',Delta2T,type(Delta2T))
+        #print('============================================')
+        
         CALC_INFO['Eta']['mixture'][species] = {
-            'value':Eta_species,
+            'value':str(Eta_species),
             'args':{
-                'Gamma0':{'value':Gamma0,'source':'<calc>'},
-                'Delta0':{'value':Delta0,'source':'<calc>'},
+                'Par_ref': {
+                     'case': 'HT 1',
+                     'source': 'eta_HT_%s'%species if EtaDB_flag else '<default>',
+                     'value': EtaDB,
+                  },
+                'Gamma2':{'value':Gamma2,'source':'<CALC_INFO>'},
+                'Delta2':{'value':Delta2,'source':'<CALC_INFO>'},
             }
         }
-        Eta += Eta_species
+        
+        Eta += Eta_species * abun
+
+    CALC_INFO['Eta']['value'] = str(Eta)
+    CALC_INFO['Eta']['status'] = 'ok'
+
     return Eta
 
 def calculate_parameter_NuVC(envdep_presets,TRANS,CALC_INFO=None):
     """
     Calculate velocity collision frequency for given Environment and TRANS.
     """
+    #return 0 # DEBUG
     Diluent = TRANS['Diluent']
-    if type(CALC_INFO) is not dict:
-        return 0
+    #if type(CALC_INFO) is not dict:
+    #    return 0
     CALC_INFO['NuVC'] = {'mixture':{}}
-    Gamma0 = CALC_INFO['Gamma0']['value']
-    Delta0 = CALC_INFO['Delta0']['value']
-    Eta = CALC_INFO['Eta']['value']
-    NuVC = Eta*(Gamma0-1j*Shift0)
+    Eta = CALC_INFO['Eta']['value']; Eta = complex(Eta)
+    NuVC = 0.0
     p = TRANS['p']
     T = TRANS['T']
-    Tref = CALC_INFO['Tref']['value']
+    #Tref = CALC_INFO['Tref']['value']
+    Tref = 296.0
     for species in Diluent:
-
+            
         abun = Diluent[species]
 
-        # 1st NuVC component: weighted sum of NuVC_i
-        NuVCDB = TRANS.get('nu_HT_%s'%species,0)
-        KappaDB = TRANS.get('kappa_HT_%s'%species,0)
-        NuVC += NuVCDB*(Tref/T)**KappaDB*p
+        NuVCDB_flag = True
+        KappaDB_flag = True
 
-        # 2nd NuVC component (with negative sign)
+        # Calculate powerlaw for NuVCDB
+        NuVCDB = TRANS.get('nu_HT_%s'%species)
+        if NuVCDB is None or type(NuVCDB) is np.ma.core.MaskedConstant:
+            NuVCDB_flag = False
+            NuVCDB = 0.0
+            
+        KappaDB = TRANS.get('kappa_HT_%s'%species)
+        if KappaDB is None or type(KappaDB) is np.ma.core.MaskedConstant:
+            KappaDB_flag = False
+            KappaDB = 0.0
+            
+        NuVC_1 = NuVCDB*(Tref/T)**KappaDB*p
+
+        # Calculate addition to the NuVC_1
         Gamma0T = CALC_INFO['Gamma0']['mixture'][species]['value']
         Delta0T = CALC_INFO['Delta0']['mixture'][species]['value']
-        EtaDB = TRANS.get('eta_HT_%s'%species,0)
-        NuVC -= EtaDB*abun*(Gamma0T-1j*Delta0T)
+        Eta_species = CALC_INFO['Eta']['mixture'][species]['value'] 
+        Eta_species = complex(Eta_species)
+        NuVC_2 = (Gamma0T-1j*Delta0T)*(Eta-Eta_species)
+        
+        # Full value for mixture species
+        NuVC_species = NuVC_1 + NuVC_2
 
         CALC_INFO['NuVC']['mixture'][species] = {
-            'value':NuVC_species,
+            'value': str(NuVC_species),
             'args':{
-                'Gamma0':{'value':Gamma0,'source':'<calc>'},
-                'Delta0':{'value':Delta0,'source':'<calc>'},
+                'Par_ref': {
+                    'case': 'HT 1',
+                    'source': 'nu_HT_%s'%species if NuVCDB_flag else '<default>',
+                    'value': NuVCDB,
+                },
+                'TempRatioPower': {
+                    'case': 'HT 1',
+                    'source': 'kappa_HT_%s'%species if KappaDB_flag else '<default>',
+                    'value': KappaDB,
+                },
+                'Gamma0':{'value':Gamma0T,'source':'<CALC_INFO>'},
+                'Delta0':{'value':Delta0T,'source':'<CALC_INFO>'},
             }
         }
 
-        NuVC += NuVC_species
+        NuVC += NuVC_species * abun
+        
+    CALC_INFO['NuVC']['value'] = str(NuVC)
+    CALC_INFO['NuVC']['status'] = 'ok'
 
     return NuVC
     
@@ -35059,7 +35118,7 @@ def environGetArguments_HT_YRosen_default(broadener,TRANS):
     abstract_args = ['Par_ref','TempRatioPower']
     lookup_cases = [
         {
-            '__case__': 'Lorentz 1',
+            '__case__': 'HT 1',
             'Par_ref':{
                 'name': 'Y_HT_%s_%d'%(broadener,T_ref),
                 'default': 0,
@@ -35523,10 +35582,7 @@ def absorptionCoefficient_Generic(Components=None,SourceTables=None,partitionFun
             if LineIntensity < IntensityThreshold: continue
 
             # calculate profile parameters 
-            if VARIABLES['abscoef_debug']:
-                CALC_INFO = {}
-            else:
-                CALC_INFO = None                
+            CALC_INFO = {}
             PARAMETERS = calcpars(TRANS=TRANS,CALC_INFO=CALC_INFO,exclude=exclude)
             
             # get final wing of the line according to max(Gamma0,GammaD), OmegaWingHW and OmegaWing
