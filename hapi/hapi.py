@@ -54,7 +54,7 @@ if 'io' in sys.modules: # define open using Linux-style line endings
 else:
     open_ = open
 
-HAPI_VERSION = '1.2.2.2'; __version__ = HAPI_VERSION
+HAPI_VERSION = '1.2.2.3'; __version__ = HAPI_VERSION
 HAPI_HISTORY = [
 'FIXED GRID BUG (ver. 1.1.0.1)',
 'FIXED OUTPUT FORMAT FOR CROSS-SECTIONS (ver. 1.1.0.1)',
@@ -95,6 +95,7 @@ HAPI_HISTORY = [
 'ADDED SUPPORT FOR TIPS-2021 (ver. 1.2.2.0)',
 'FIXED BUG WITH WAVENUMBERGRID (ver. 1.2.2.1)',
 'FIXED BUG WITH ZEROING OUT LINES WITH NON-STANDARD PARAMETERS (ver. 1.2.2.2)'
+'ADDED SUPPORT FOR PARAMETERS ABSENT IN PARAMETER_META (ver. 1.2.2.3)'
 ]
 
 # version header
@@ -159,6 +160,11 @@ if GLOBAL_DEBUG:
    GLOBAL_HOST = LOCAL_HOST+':8000' # localhost
 else:
    GLOBAL_HOST = 'http://hitran.org'
+
+# default PARAMETER_META for custom user parameters
+PMETA_DEFAULT = {
+    "default_fmt" : "%s",
+}
 
 VARIABLES['PROXY'] = {}
 # EXAMPLE OF PROXY:
@@ -988,7 +994,7 @@ def getRowObjectFromString(input_string,TableName):
             pos = 0
         for par_name in LOCAL_TABLE_CACHE[TableName]['header']['extra']:
             par_format = LOCAL_TABLE_CACHE[TableName]['header']['extra_format'][par_name]
-            regex = '^\%([0-9]+)\.?[0-9]*([dfs])$' #
+            #regex = '^\%([0-9]+)\.?[0-9]*([dfs])$' #
             regex = FORMAT_PYTHON_REGEX
             (lng,trail,lngpnt,ty) = re.search(regex,par_format).groups()
             lng = int(lng) 
@@ -1088,7 +1094,7 @@ def storage2cache(TableName,cast=True,ext=None,nlines=None,pos=None):
         glob_order += LOCAL_TABLE_CACHE[TableName]['header']['extra']
         glob_format.update(LOCAL_TABLE_CACHE[TableName]['header']['extra_format'])
         for par_name in LOCAL_TABLE_CACHE[TableName]['header']['extra']:
-            glob_default[par_name] = PARAMETER_META[par_name]['default_fmt']
+            glob_default[par_name] = PARAMETER_META.get(par_name,PMETA_DEFAULT)['default_fmt']
             LOCAL_TABLE_CACHE[TableName]['data'][par_name] = []
     
     header = LOCAL_TABLE_CACHE[TableName]['header']
@@ -2831,7 +2837,7 @@ def prepareHeader(parlist):
     for param in plist:
         param = param.lower()
         HEADER['extra'].append(param)
-        HEADER['extra_format'][param] = PARAMETER_META[param]['default_fmt']
+        HEADER['extra_format'][param] = PARAMETER_META.get(param,PMETA_DEFAULT)['default_fmt']
         
     return HEADER
         
