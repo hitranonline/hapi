@@ -2875,8 +2875,11 @@ def queryHITRAN(TableName,iso_id_list,numin,numax,pargroups=[],params=[],dotpar=
             opener = urllib2.build_opener(proxy)
             urllib2.install_opener(opener)            
         req = urllib2.urlopen(url)
-    except urllib2.HTTPError:
-        raise Exception('Failed to retrieve data for given parameters.')
+    except urllib2.HTTPError as err: 
+        if err.code == 403:
+            raise Exception('You have exceeded the daily limit of API queries.')
+        else:    
+            raise Exception('Failed to retrieve data for given parameters.')            
     except urllib2.URLError:
         raise Exception('Cannot connect to %s. Try again or edit GLOBAL_HOST variable.' % GLOBAL_HOST)
     CHUNK = 64 * 1024
