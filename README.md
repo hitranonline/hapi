@@ -1,7 +1,7 @@
 # HITRAN Application Programming Interface (HAPI)
 ===============================================
 
-Current version: 1.2.2.4
+Current version: 1.3.0.0
 
 ## Version history
 
@@ -46,6 +46,7 @@ Current version: 1.2.2.4
   39) FIXED BUG WITH ZEROING OUT LINES WITH NON-STANDARD PARAMETERS (ver. 1.2.2.2)
   40) ADDED SUPPORT FOR PARAMETERS ABSENT IN PARAMETER_META (ver. 1.2.2.3)
   41) ADDED SUPPORT FOR 403 ERROR MESSAGE (QUERY LIMIT EXCEEDED)  (ver. 1.2.2.4)
+  42) ADDED TIPS-2025 TABLES AND UPDATED THE ISOTOPOLOGUES DICTIONARY (ver. 1.3.0.0)
 
 ## Introduction
 
