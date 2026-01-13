@@ -51612,7 +51612,7 @@ PYTIPS = PYTIPS2025 # stub for backwards compatibility
 # I - isotopologue number
 # T - temperature (K)
 # returns (StatWeight,PartitionSum)
-def partitionSum(M,I,T,step=None,version=2021):
+def partitionSum(M,I,T,step=None,version=2025):
     """
     INPUT PARAMETERS: 
         M: HITRAN molecule number              (required)
@@ -51645,6 +51645,10 @@ def partitionSum(M,I,T,step=None,version=2021):
             TIPS-2021:
             Gamache et al. (2021), JQSRT 271, 107713 (doi: 10.1016/j.jqsrt.2021.107713)
             Data obtained from: https://zenodo.org/record/4708099
+            
+            TIPS-2025:
+            Gamache et al. (2025), JQSRT 345, 109568 (doi: 10.1016/j.jqsrt.2025.109568)
+            Data obtained from: https://zenodo.org/records/17191976
 
         Output depends on a structure of input parameter T so that:
             1) If T is a scalar/list and step IS NOT provided,
@@ -51665,6 +51669,8 @@ def partitionSum(M,I,T,step=None,version=2021):
         BD_TIPS = BD_TIPS_2017_PYTHON
     elif version==2021:
         BD_TIPS = BD_TIPS_2021_PYTHON
+    elif version==2025:
+        BD_TIPS = BD_TIPS_2025_PYTHON
     else:
         raise Exception('Unknown version of TIPS: %s'%str(version))
     # partitionSum
