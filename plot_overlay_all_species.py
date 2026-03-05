@@ -49,7 +49,7 @@ print(f"Found {len(source_tables)} species tables")
 # -------------------------
 # 3) Compute one curve per species and overlay
 # -------------------------
-plt.figure(figsize=(12, 6))
+fig, ax = plt.subplots(figsize=(12, 6))
 
 plotted = 0
 for table in source_tables:
@@ -60,9 +60,15 @@ for table in source_tables:
             WavenumberRange=[WN_MIN, WN_MAX],
             WavenumberStep=WN_STEP,
             Environment={"T": TEMPERATURE_K, "p": PRESSURE_ATM},
-            HITRAN_units=False,
+            HITRAN_units=False, # False cm^-1, True means "HITRAN units" cm^2/molecule
         )
-        plt.plot(nu, coef, lw=1.0, label=table)
+        # only support cm^-1 input coef
+        # _, trans = hapi.transmittanceSpectrum(
+        #     nu,
+        #     coef,
+        #     Environment={"l": 100.0}  # path length, cm
+        # )
+        ax.plot(nu, coef, lw=1.0, label=table)
         plotted += 1
     except Exception as exc:
         print(f"FAILED {table}: {exc}")
@@ -73,13 +79,23 @@ if plotted == 0:
 # -------------------------
 # 4) Save overlay figure
 # -------------------------
-plt.xlim(WN_MIN, WN_MAX)
-plt.xlabel("Wavenumber (cm^-1)")
-plt.ylabel("Absorption coefficient")
-plt.title("Hydrocarbon Species Overlay (Voigt) 2500-3500 cm^-1")
-plt.grid(alpha=0.25)
-plt.legend(fontsize=8, ncol=2)
-plt.tight_layout()
-plt.savefig(OUTPUT_PNG, dpi=160)
+# plt.xlim(WN_MIN, WN_MAX)
+# plt.xlabel("Wavenumber (cm^-1)")
+# plt.ylabel("Absorption coefficient")
+# plt.title("Hydrocarbon Species Overlay (Voigt) 2500-3500 cm^-1")
+# plt.grid(alpha=0.25)
+# plt.legend(fontsize=8, ncol=2)
+# plt.tight_layout()
+# plt.show()
+
+ax.set_xlim(WN_MIN, WN_MAX)
+ax.set_xlabel("Wavenumber (cm^-1)")
+ax.set_ylabel("Absorption coefficient")
+ax.set_title("Hydrocarbon Species Overlay (Voigt) 2500-3500 cm^-1")
+ax.grid(alpha=0.25)
+ax.legend(fontsize=8, ncol=2)
+fig.tight_layout()
+# plt.show()
+plt.savefig(OUTPUT_PNG, dpi=300)
 
 print(f"Saved plot: {OUTPUT_PNG}")

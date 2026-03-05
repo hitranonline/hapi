@@ -71,7 +71,7 @@ for table in source_tables:
         plt.title(f"{table} (Voigt) {int(WN_MIN)}-{int(WN_MAX)} cm^-1")
         plt.grid(alpha=0.25)
         plt.tight_layout()
-        plt.savefig(out_png, dpi=160)
+        plt.savefig(out_png, dpi=300)
         plt.close()
 
         print(f"Saved: {out_png}")
