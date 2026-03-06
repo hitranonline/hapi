@@ -1,4 +1,5 @@
 import os
+import re
 
 import hapi
 import plotly.graph_objects as go
@@ -7,13 +8,13 @@ import plotly.graph_objects as go
 # USER SETTINGS
 # -------------------------
 DB_DIR = "hitran_db"
-OUTPUT_DIR = "species_plots_2500_3500_multiTP"
+OUTPUT_DIR = "5_species"
 
 WN_MIN = 2500.0
 WN_MAX = 3500.0
-WN_STEP = 0.05
+WN_STEP = 0.001
 
-T_K = 800.0
+T_K = 600.0
 P_TORR = 4.0
 P_ATM = P_TORR / 760.0
 PATH_LENGTH_CM = 100.0
@@ -36,8 +37,13 @@ def main() -> None:
 
     for sp in SPECIES:
         table = sp["table"]
+        
+        m = re.search(r"_M(\d+)_I(\d+)", table)
+        mol_id = int(m.group(1)) # type: ignore
+        iso_id = int(m.group(2)) # type: ignore
+
         x_i = sp["x"]  # mole fraction
-        p_i_atm = x_i * P_ATM  # partial pressure
+        # p_i_atm = x_i * P_ATM  # partial pressure
 
         header_path = os.path.join(DB_DIR, f"{table}.header")
         if not os.path.exists(header_path):
@@ -46,10 +52,12 @@ def main() -> None:
 
         try:
             nu, coef = hapi.absorptionCoefficient_Voigt(
+                Components=[(mol_id, iso_id, x_i)],
                 SourceTables=[table],
                 WavenumberRange=[WN_MIN, WN_MAX],
                 WavenumberStep=WN_STEP,
-                Environment={"T": T_K, "p": p_i_atm},
+                Environment={"T": T_K, "p": P_ATM},
+                Diluent={"self": x_i, "He": 1 - x_i},
                 HITRAN_units=False,
             )
 
