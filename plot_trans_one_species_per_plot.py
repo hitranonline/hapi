@@ -16,8 +16,8 @@ except ImportError as exc:
 DB_DIR = "hitran_db"
 WN_MIN = 2500.0
 WN_MAX = 3500.0
-WN_STEP = 0.05
-PATH_LENGTH_CM = 300.0
+WN_STEP = 0.01
+PATH_LENGTH_CM = 100.0 # 100 cm
 OUTPUT_DIR = "species_plots_2500_3500_multiTP"
 
 # Define the (T, p) cases you want on the same plot
@@ -125,7 +125,7 @@ for table in source_tables:
     )
     fig.update_xaxes(range=[WN_MIN, WN_MAX])
 
-    out_html = os.path.join(OUTPUT_DIR, f"{table}_{int(WN_MIN)}_{int(WN_MAX)}_{P_ATM}_{T_K}.html")
+    out_html = os.path.join(OUTPUT_DIR, f"{table}_{int(WN_MIN)}_{int(WN_MAX)}.html")
     fig.write_html(out_html, include_plotlyjs="cdn")
     print(f"Saved: {out_html}")
 
