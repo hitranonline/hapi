@@ -4,3 +4,8 @@ build/
 dist/
 hitran_api.egg-info/
 *~
+
+species_plots_2500_3500/
+species_plots_2500_3500_multiTP/
+species_plots_2500_3500_test/
+5_species/
