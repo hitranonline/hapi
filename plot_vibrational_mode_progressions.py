@@ -22,8 +22,10 @@ How classification works
   - CO uses `nu1` -> mode index 0 in `(v,)`
 - Category rules:
   - `0->1` => `fundamental_band`
-  - `0->2`, `0->3`, ... => `overtone_band`
-  - `1->2`, `2->3`, ... => `hot_band`
+  - `0->2` => `first_overtone_band`
+  - `0->3` => `second_overtone_band`
+  - `1->2`, `2->3`, ... => `hot_fundamental_band`
+  - `1->3`, `2->4`, ... => `hot_first_overtone_band`
 
 Important interpretation
 ------------------------
@@ -185,13 +187,27 @@ def exact_band_key(lower_raw: str, upper_raw: str) -> tuple[str, str] | None:
 
 
 def progression_category(lower_q: int, upper_q: int) -> str:
-    if (lower_q, upper_q) == (0, 1):
-        return "fundamental_band"
-    if lower_q == 0 and upper_q > 1:
-        return "overtone_band"
-    if lower_q > 0 and upper_q == lower_q + 1:
-        return "hot_band"
-    return f"{MODE_LABEL}_transition"
+    delta_v = upper_q - lower_q
+    if delta_v <= 0:
+        return f"{MODE_LABEL}_transition"
+
+    if delta_v == 1:
+        base_label = "fundamental"
+    else:
+        overtone_order = delta_v - 1
+        overtone_names = {
+            1: "first",
+            2: "second",
+            3: "third",
+            4: "fourth",
+            5: "fifth",
+        }
+        order_label = overtone_names.get(overtone_order, f"{overtone_order}th")
+        base_label = f"{order_label}_overtone"
+
+    if lower_q > 0:
+        return f"hot_{base_label}_band"
+    return f"{base_label}_band"
 
 
 def category_output_stem(category: str, lower_q: int, upper_q: int) -> str:
