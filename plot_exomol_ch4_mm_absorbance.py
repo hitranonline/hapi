@@ -20,7 +20,7 @@ import argparse
 import bz2
 import csv
 import math
-import os
+import re
 from pathlib import Path
 
 import numpy as np
@@ -91,20 +91,77 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def iter_bz2_text_lines(path: Path, chunk_size: int = 8 * 1024 * 1024):
+    decompressor = bz2.BZ2Decompressor()
+    pending = b""
+
+    with path.open("rb") as handle:
+        while True:
+            chunk = handle.read(chunk_size)
+            if not chunk:
+                break
+
+            data = decompressor.decompress(chunk)
+            if data:
+                pending += data
+                lines = pending.split(b"\n")
+                pending = lines.pop()
+                for line in lines:
+                    yield line.decode("utf-8").rstrip("\r")
+
+        if pending:
+            yield pending.decode("utf-8").rstrip("\r")
+
+
 def transition_filename(start_cm: int) -> str:
     return f"{DATASET_STEM}__{start_cm:05d}-{start_cm + 100:05d}.trans.bz2"
 
 
-def overlapping_transition_files(data_dir: Path, wn_min: float, wn_max: float, wing: float) -> list[Path]:
+def available_transition_starts(data_dir: Path) -> list[int]:
+    starts: list[int] = []
+    pattern = re.compile(rf"^{re.escape(DATASET_STEM)}__(\d{{5}})-(\d{{5}})\.trans\.bz2$")
+    for path in data_dir.glob(f"{DATASET_STEM}__*.trans.bz2"):
+        match = pattern.match(path.name)
+        if match is None:
+            continue
+        start_cm = int(match.group(1))
+        end_cm = int(match.group(2))
+        if end_cm != start_cm + 100:
+            continue
+        starts.append(start_cm)
+    if not starts:
+        raise FileNotFoundError(f"No ExoMol transition files found in {data_dir}")
+    return sorted(starts)
+
+
+def overlapping_transition_files(data_dir: Path, wn_min: float, wn_max: float, wing: float) -> tuple[list[Path], float]:
+    available_starts = available_transition_starts(data_dir)
+    available_min = available_starts[0]
+    available_max = available_starts[-1] + 100
+
     start_chunk = int(math.floor(max(0.0, wn_min - wing) / 100.0) * 100)
     end_chunk = int(math.ceil((wn_max + wing) / 100.0) * 100)
+
+    clipped_start = max(start_chunk, available_min)
+    clipped_end = min(end_chunk, available_max)
+    if clipped_end <= clipped_start:
+        raise FileNotFoundError(
+            f"No available transition files overlap {wn_min:g}-{wn_max:g} cm^-1 in {data_dir}"
+        )
+
+    effective_wing = wing
+    if clipped_start > start_chunk:
+        effective_wing = min(effective_wing, max(0.0, wn_min - clipped_start))
+    if clipped_end < end_chunk:
+        effective_wing = min(effective_wing, max(0.0, clipped_end - wn_max))
+
     files = []
-    for start_cm in range(start_chunk, end_chunk, 100):
+    for start_cm in range(clipped_start, clipped_end, 100):
         path = data_dir / transition_filename(start_cm)
         if not path.exists():
             raise FileNotFoundError(f"Missing transition file: {path}")
         files.append(path)
-    return files
+    return files, effective_wing
 
 
 def parse_def_file(def_path: Path) -> dict[str, float]:
@@ -155,17 +212,16 @@ def load_state_arrays(states_path: Path, nstates: int) -> tuple[np.ndarray, np.n
     energies.fill(np.nan)
     g_totals.fill(np.nan)
 
-    with bz2.open(states_path, "rt", encoding="utf-8") as handle:
-        for line_number, raw_line in enumerate(handle, start=1):
-            parts = raw_line.split(None, 4)
-            if len(parts) < 3:
-                continue
-            state_id = int(parts[0])
-            energies[state_id] = float(parts[1])
-            g_totals[state_id] = float(parts[2])
+    for line_number, raw_line in enumerate(iter_bz2_text_lines(states_path), start=1):
+        parts = raw_line.split(None, 4)
+        if len(parts) < 3:
+            continue
+        state_id = int(parts[0])
+        energies[state_id] = float(parts[1])
+        g_totals[state_id] = float(parts[2])
 
-            if line_number % 1_000_000 == 0:
-                print(f"loaded {line_number:,} states")
+        if line_number % 1_000_000 == 0:
+            print(f"loaded {line_number:,} states")
 
     if np.isnan(energies[1:]).any() or np.isnan(g_totals[1:]).any():
         raise RuntimeError(f"State table {states_path} did not fill all expected state IDs")
@@ -243,42 +299,41 @@ def collect_relevant_transitions(
 
     for path in transition_files:
         print(f"scan {path.name}")
-        with bz2.open(path, "rt", encoding="utf-8") as handle:
-            for raw_line in handle:
-                parts = raw_line.split()
-                if len(parts) != 3:
-                    continue
+        for raw_line in iter_bz2_text_lines(path):
+            parts = raw_line.split()
+            if len(parts) != 3:
+                continue
 
-                upper_id = int(parts[0])
-                lower_id = int(parts[1])
-                a_value = float(parts[2])
-                stats["parsed"] += 1
+            upper_id = int(parts[0])
+            lower_id = int(parts[1])
+            a_value = float(parts[2])
+            stats["parsed"] += 1
 
-                wavenumber = energies[upper_id] - energies[lower_id]
-                if wavenumber < search_min or wavenumber > search_max:
-                    continue
-                stats["in_window"] += 1
+            wavenumber = energies[upper_id] - energies[lower_id]
+            if wavenumber < search_min or wavenumber > search_max:
+                continue
+            stats["in_window"] += 1
 
-                intensity = lte_line_intensity_cm_per_molecule(
-                    wavenumber=wavenumber,
-                    a_coefficient=a_value,
-                    g_upper=g_totals[upper_id],
-                    lower_energy_cm=energies[lower_id],
-                    temperature_k=temperature_k,
-                    partition_function=partition_function,
+            intensity = lte_line_intensity_cm_per_molecule(
+                wavenumber=wavenumber,
+                a_coefficient=a_value,
+                g_upper=g_totals[upper_id],
+                lower_energy_cm=energies[lower_id],
+                temperature_k=temperature_k,
+                partition_function=partition_function,
+            )
+            if intensity < intensity_threshold:
+                continue
+
+            kept_wavenumbers.append(wavenumber)
+            kept_intensities.append(intensity)
+            stats["kept"] += 1
+
+            if stats["parsed"] % 1_000_000 == 0:
+                print(
+                    f"  parsed {stats['parsed']:,} transitions, "
+                    f"window {stats['in_window']:,}, kept {stats['kept']:,}"
                 )
-                if intensity < intensity_threshold:
-                    continue
-
-                kept_wavenumbers.append(wavenumber)
-                kept_intensities.append(intensity)
-                stats["kept"] += 1
-
-                if stats["parsed"] % 1_000_000 == 0:
-                    print(
-                        f"  parsed {stats['parsed']:,} transitions, "
-                        f"window {stats['in_window']:,}, kept {stats['kept']:,}"
-                    )
 
     return np.asarray(kept_wavenumbers), np.asarray(kept_intensities), stats
 
@@ -394,12 +449,17 @@ def main() -> None:
     print("loading states")
     energies, g_totals = load_state_arrays(states_path, int(metadata["nstates"]))
 
-    transition_files = overlapping_transition_files(
+    transition_files, effective_wing = overlapping_transition_files(
         data_dir=args.data_dir,
         wn_min=args.wn_min,
         wn_max=args.wn_max,
         wing=args.line_cutoff,
     )
+    if effective_wing < args.line_cutoff:
+        print(
+            f"warning: requested line cutoff {args.line_cutoff:g} cm^-1 reduced to "
+            f"{effective_wing:g} cm^-1 because neighboring transition chunks are not available"
+        )
 
     line_centers, line_intensities, stats = collect_relevant_transitions(
         transition_files=transition_files,
@@ -407,7 +467,7 @@ def main() -> None:
         g_totals=g_totals,
         wn_min=args.wn_min,
         wn_max=args.wn_max,
-        wing=args.line_cutoff,
+        wing=effective_wing,
         temperature_k=args.temperature_k,
         partition_function=partition_function,
         intensity_threshold=args.intensity_threshold,
