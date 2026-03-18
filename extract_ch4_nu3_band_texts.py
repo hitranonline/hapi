@@ -1,3 +1,27 @@
+"""Extract exact CH4 nu3 band lines into per-band text files.
+
+Inputs:
+- ``hitran_db/CH4_M6_I1.header``: JSON metadata that defines the fixed-width
+  field positions for the HITRAN text records.
+- ``hitran_db/CH4_M6_I1.data``: source fixed-width line list to scan.
+- ``ch4_nu3_progressions/CH4_nu3_progression_summary.csv``: summary table that
+  lists the exact target ``band_label`` values and expected ``line_count`` for
+  the 9 CH4 nu3 bands to export. The extractor uses ``band_label`` to decide
+  which lines to copy; ``line_count`` is used only afterward as a verification
+  check that each exported text file contains the full expected number of rows.
+
+Outputs:
+- ``ch4_nu3_progressions/band_line_texts/*.txt``: one plain-text file per
+  target band, each containing the original matching records copied verbatim
+  from ``CH4_M6_I1.data``.
+- Console status lines reporting the expected and actual line count for each
+  exported band file.
+
+The script raises ``RuntimeError`` if the summary CSV does not contain exactly
+9 target bands or if any exported file's line count does not match the expected
+count from the CSV.
+"""
+
 import csv
 import json
 import os
@@ -110,6 +134,7 @@ def main() -> None:
     for band_label, expected_count in expected_counts.items():
         actual_count = matched_counts[band_label]
         out_path = output_path_for_band(band_label)
+        # band_label controls extraction; line_count only validates completeness.
         status = "OK" if actual_count == expected_count else "MISMATCH"
         print(f"{status}: {band_label} | expected={expected_count} actual={actual_count} | {out_path}")
         if actual_count != expected_count:

@@ -5,6 +5,45 @@ This is separate from the HITRAN/HAPI workflow used elsewhere in the repo.
 It computes LTE line intensities from the ExoMol states/trans/partition-function
 files and then applies a Voigt profile to produce an absorbance curve.
 
+How the ExoMol inputs are handled
+---------------------------------
+- The ExoMol `.states.bz2` and `.trans.bz2` files are compressed text files.
+  `iter_bz2_text_lines(...)` streams each file, decompresses it in memory with
+  `bz2.BZ2Decompressor`, and yields plain-text lines to the caller; it does not
+  convert the dataset into standalone `.txt` files on disk.
+- The `.def` file is read for metadata such as isotopologue mass, default
+  Lorentz half-width (`gamma0`), and the temperature exponent (`n_exponent`)
+  by `parse_def_file(...)`.
+- The `.pf` file is read to get the partition function at the requested gas
+  temperature by `load_partition_function(...)` and
+  `interpolate_partition_function(...)`.
+
+How absorbance is computed here
+-------------------------------
+- This script does not call HAPI to compute coefficients or transmittance.
+- Instead it reads ExoMol state energies, total degeneracies, and Einstein-A
+  values directly from the ExoMol files via `load_state_arrays(...)` and
+  `collect_relevant_transitions(...)`.
+- For each kept transition it computes the LTE line intensity with
+  `lte_line_intensity_cm_per_molecule(...)`.
+- It then builds a Voigt-broadened cross section on the requested wavenumber
+  grid with `render_cross_section(...)`.
+- Finally it converts cross section to absorbance with Beer-Lambert scaling:
+  `absorbance = cross_section * absorber_number_density * path_length`,
+  where absorber number density is computed from `number_density_cm3(...)`
+  times the CH4 mole fraction.
+
+Where to set the case conditions
+--------------------------------
+- The main case settings are command-line arguments defined in `parse_args()`.
+- Important ones are:
+  `--temperature-k`, `--pressure-torr`, `--mole-fraction`, `--path-length-cm`,
+  `--wn-min`, `--wn-max`, and `--wn-step`.
+- The default values currently correspond to:
+  `T=600 K`, `P=3 Torr`, `x=0.008`, `L=100 cm`, `3000-3010 cm^-1`.
+- If you want ppm, convert to mole fraction before passing it in:
+  `1000 ppm = 1000e-6 = 0.001`.
+
 Notes
 -----
 - The pressure broadening uses the dataset defaults in the `.def` file unless
@@ -237,6 +276,40 @@ def lte_line_intensity_cm_per_molecule(
     temperature_k: float,
     partition_function: float,
 ) -> float:
+    """
+    Convert one ExoMol transition into an LTE line intensity.
+
+    Output meaning
+    --------------
+    Returns the integrated line intensity `S(T)` in units of `cm/molecule`
+    at the requested temperature.
+
+    This is not absorbance yet.
+    It is the line strength for one transition before line broadening is applied.
+
+    How it is used later
+    --------------------
+    - `collect_relevant_transitions(...)` computes one intensity value per kept
+      transition with this function.
+    - `render_cross_section(...)` multiplies that intensity by a normalized
+      Voigt profile to spread the line over the spectral grid and form the
+      cross section `sigma(nu)`.
+    - `main()` then converts cross section to absorbance with:
+      `absorbance = sigma(nu) * absorber_number_density * path_length`.
+
+    Inputs
+    ------
+    - `wavenumber`: line center in `cm^-1`
+    - `a_coefficient`: Einstein-A value from the ExoMol `.trans` row
+    - `g_upper`: upper-state total degeneracy from the `.states` file
+    - `lower_energy_cm`: lower-state energy in `cm^-1`
+    - `temperature_k`: gas temperature in K
+    - `partition_function`: `Q(T)` at the same temperature
+
+    In short:
+    this function maps ExoMol's `(A, state energies, degeneracy, Q(T))`
+    into a temperature-dependent spectroscopic line strength.
+    """
     if wavenumber <= 0.0:
         return 0.0
 
