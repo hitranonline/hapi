@@ -15,4 +15,8 @@ exomol_db/
 exomol_ch4_mm_page.html
 exomol_ch4_mm_plots/
 exomol_ch4_mm_scans/
+exomol_ch4_mm_pure_nu3_band_texts/
+exomol_ch4_mm_pure_nu3_band_texts_hitran_style/
+exomol_ch4_mm_pure_nu3_band_texts_hitran_style_sorted/
+exomol_ch4_mm_pure_nu3_band_texts*.zip
 classify/

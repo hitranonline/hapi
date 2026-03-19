@@ -4,6 +4,21 @@ Extract pure-CH4-nu3 ExoMol MM transitions into per-band text files.
 This script is intentionally modeled after `extract_ch4_nu3_band_texts.py`,
 but it works directly from the ExoMol MM `.states/.trans/.pf/.def` files.
 
+Inputs
+------
+- `--data-dir/{DATASET_STEM}.def`: ExoMol definition/metadata file used to
+  discover the state-table column layout and required flags.
+- `--data-dir/{DATASET_STEM}.pf`: partition-function table used to interpolate
+  the partition function at `--reference-temperature-k`.
+- `--data-dir/{DATASET_STEM}.states.bz2`: compressed state table containing
+  energies, degeneracies, and vibrational/symmetry labels for each state ID.
+- `--data-dir/{DATASET_STEM}__*.trans.bz2`: one or more compressed transition
+  chunks containing `upper_id lower_id Einstein_A`; the script scans only the
+  chunks overlapping `--wn-min/--wn-max` when a window is provided.
+- Command-line filters: `--reference-temperature-k`,
+  `--intensity-threshold`, `--wn-min`, `--wn-max`, and
+  `--require-unit-step` control which transitions are exported.
+
 Definition of "pure nu3" used here
 ----------------------------------
 - lower and upper states must both satisfy `n1 = n2 = n4 = 0`
@@ -22,6 +37,16 @@ Outputs
   exact ExoMol band pair
 - `exomol_ch4_mm_pure_nu3_band_texts/exomol_pure_nu3_band_text_summary.csv`:
   manifest CSV with one row per exported band and its transition count
+
+Band labeling used by this extractor
+------------------------------------
+The MM `.states` schema defines many ExoMol quantum labels, but this extractor
+groups states using only a subset: `n1`, `n2`, `n3`, `n4`, `Gtot`, `Gvib`,
+`Grot`, `L3`, and `M3`.
+
+That means this script intentionally omits other MM labels such as `P`, `Pnum`,
+`L2`, `L4`, `M4`, `irot`, `ivib`, `Coef`, `v1`-`v9`, and `SourceType` when it
+decides whether two states belong to the same exported band signature.
 """
 
 from __future__ import annotations
@@ -65,19 +90,49 @@ HITRAN_STYLE_MAP = {
 
 @dataclass(frozen=True)
 class BandSignature:
+    # TODO: label organization is still incomplete; some ExoMol MM labels are
+    # still omitted here and this extractor has not finished that cleanup task.
+    """Subset of ExoMol MM state labels used to define an exported band.
+
+    Meanings of the labels kept here:
+    - `n1`: A1-symmetry normal-mode quantum number.
+    - `n2`: E-symmetry normal-mode quantum number.
+    - `n3`: F1-symmetry normal-mode quantum number; this is the `nu3` mode that
+      the script tracks for pure-`nu3` progressions.
+    - `n4`: F2-symmetry normal-mode quantum number.
+    - `gtot_sym`: ExoMol quantum label `Gtot`, the total Td symmetry label of
+      the state. This is not the numeric lower-case `gtot` degeneracy column.
+    - `gvib`: ExoMol quantum label `Gvib`, the vibrational symmetry label.
+    - `grot`: ExoMol quantum label `Grot`, the rotational symmetry label.
+    - `l3`: ExoMol quantum label `L3`, the vibrational angular-momentum quantum
+      number associated with mode 3.
+    - `m3`: ExoMol quantum label `M3`, the multiplicity index associated with
+      mode 3.
+
+    Important limitation:
+    - This is not the full ExoMol MM label set.
+    - Labels present in the MM `.def/.states` schema but omitted here include
+      `P`, `Pnum`, `L2`, `L4`, `M4`, `irot`, `ivib`, `Coef`, `v1`-`v9`, and
+      the auxiliary title `SourceType`.
+    - As a result, two states that differ only in one of those omitted labels
+      will collapse to the same `BandSignature` in this extractor.
+    """
     n1: int
     n2: int
     n3: int
     n4: int
+    gtot_sym: str
+    gvib: str
+    grot: str
     l3: int
     m3: int
-    gvib: str
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Extract pure-nu3 CH4 ExoMol MM transitions into per-band text files.",
     )
+    # Runtime inputs: source dataset location plus export/intensity/window filters.
     parser.add_argument("--data-dir", type=Path, default=DATA_DIR, help="Directory containing the ExoMol MM files.")
     parser.add_argument("--output-dir", type=Path, default=OUTPUT_DIR, help="Directory for exported text files.")
     parser.add_argument(
@@ -189,21 +244,24 @@ def build_signature(parts: list[str], column_indices: dict[str, int]) -> BandSig
         n2=int(parts[column_indices["n2"]]),
         n3=int(parts[column_indices["n3"]]),
         n4=int(parts[column_indices["n4"]]),
+        gtot_sym=parts[column_indices["Gtot"]],
+        gvib=parts[column_indices["Gvib"]],
+        grot=parts[column_indices["Grot"]],
         l3=int(parts[column_indices["L3"]]),
         m3=int(parts[column_indices["M3"]]),
-        gvib=parts[column_indices["Gvib"]],
     )
 
 
 def exomol_signature_label(signature: BandSignature) -> str:
     return (
         f"{signature.n1} {signature.n2} {signature.n3} {signature.n4} "
-        f"{signature.gvib} L3={signature.l3} M3={signature.m3}"
+        f"Gtot={signature.gtot_sym} Gvib={signature.gvib} Grot={signature.grot} "
+        f"L3={signature.l3} M3={signature.m3}"
     )
 
 
 def hitran_style_signature_label(signature: BandSignature) -> str:
-    hitran_symmetry = HITRAN_STYLE_MAP.get(signature.gvib, signature.gvib)
+    hitran_symmetry = HITRAN_STYLE_MAP.get(signature.gtot_sym, signature.gtot_sym)
     return f"{signature.n1} {signature.n2} {signature.n3} {signature.n4} {hitran_symmetry}"
 
 
@@ -212,9 +270,11 @@ def safe_label_fragment(value: str) -> str:
 
 
 def signature_stem(signature: BandSignature) -> str:
+    # Build a stable filename stem from one ExoMol band signature.
     return (
         f"{signature.n1}_{signature.n2}_{signature.n3}_{signature.n4}_"
-        f"{signature.gvib}_L3_{signature.l3}_M3_{signature.m3}"
+        f"Gtot_{signature.gtot_sym}_Gvib_{signature.gvib}_Grot_{signature.grot}"
+        f"_L3_{signature.l3}_M3_{signature.m3}"
     )
 
 
@@ -246,7 +306,7 @@ def load_state_arrays(
     signature_lookup: list[BandSignature | None] = [None]
     signature_to_id: dict[BandSignature, int] = {}
 
-    required_labels = {"n1", "n2", "n3", "n4", "L3", "M3", "Gvib"}
+    required_labels = {"n1", "n2", "n3", "n4", "Gtot", "Gvib", "Grot", "L3", "M3"}
     missing_labels = required_labels - column_indices.keys()
     if missing_labels:
         raise RuntimeError(f"Missing required state columns: {sorted(missing_labels)}")
@@ -491,6 +551,12 @@ def main() -> None:
                 stats["kept"] += 1
 
                 if stats["parsed"] % 1_000_000 == 0:
+                    # Progress summary:
+                    # - parsed: total transition rows read
+                    # - matching_states: transitions whose states pass the pure-nu3 filter
+                    # - in_window: matching transitions inside the selected wavenumber range
+                    # - kept: transitions exported after all filters, including intensity
+                    # - bands: distinct lower-signature -> upper-signature groups exported so far
                     print(
                         f"  parsed {stats['parsed']:,} transitions, "
                         f"matching {stats['matching_states']:,}, "
