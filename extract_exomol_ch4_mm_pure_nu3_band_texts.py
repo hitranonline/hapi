@@ -92,8 +92,8 @@ def parse_args() -> argparse.Namespace:
         default=0.0,
         help="Discard transitions weaker than this reference-temperature line intensity.",
     )
-    parser.add_argument("--wn-min", type=float, default=None, help="Optional minimum wavenumber in cm^-1.")
-    parser.add_argument("--wn-max", type=float, default=None, help="Optional maximum wavenumber in cm^-1.")
+    parser.add_argument("--wn-min", type=float, default=3000, help="Optional minimum wavenumber in cm^-1.")
+    parser.add_argument("--wn-max", type=float, default=3000.001, help="Optional maximum wavenumber in cm^-1.")
     parser.add_argument(
         "--require-unit-step",
         action="store_true",

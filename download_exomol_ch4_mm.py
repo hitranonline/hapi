@@ -93,13 +93,13 @@ def main() -> int:
     parser.add_argument(
         "--wn-min",
         type=float,
-        default=2500.0,
+        default=3200.0,
         help="Minimum wavenumber in cm^-1 for transition chunks.",
     )
     parser.add_argument(
         "--wn-max",
         type=float,
-        default=3500.0,
+        default=3600.0,
         help="Maximum wavenumber in cm^-1 for transition chunks.",
     )
     parser.add_argument(
