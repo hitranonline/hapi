@@ -1,30 +1,42 @@
 """
-Build a summary table from generated per-band absorbance curves.
+Build a band-summary table from previously generated per-band curve exports.
 
-Supported inputs
-----------------
-1. HITRAN text exports
-   Uses the existing `ch4_nu3_progressions/band_line_texts` files plus the
-   rendered curve CSV/HTML outputs.
+Inputs
+------
+This script supports two input modes:
 
-2. ExoMol or other manifest-driven exports
-   Reads a manifest CSV describing one band per row. This avoids any HAPI text
-   reconstruction and is suitable for ExoMol-derived band exports.
+1. `--input-kind=hitran`
+   Reads the existing CH4 nu3 HITRAN workflow outputs:
+   - per-band line-text files in `ch4_nu3_progressions/band_line_texts`
+   - per-band curve CSV/HTML files produced by `render_band_line_text_curves.py`
 
-Manifest requirements for non-HITRAN inputs
--------------------------------------------
-Required columns:
+2. `--input-kind=exomol`
+   Reads a manifest CSV with one exported band per row. This is intended for
+   ExoMol-style workflows and other manifest-driven band exports.
+
+Manifest columns for `--input-kind=exomol`
+------------------------------------------
+Required:
 - `band_label`
-- `mode_pair` or `mode_pair_label`      example: `nu3 0->1`
+- `mode_pair` or `mode_pair_label`   example: `nu3 0->1`
 - `line_count`
 - `csv_path` or `curve_csv`
 
-Optional columns:
+Optional:
 - `html_path` or `curve_html`
 - `category`
 - `strongest_line_wavenumber_cm-1`
 - `sw_weighted_line_center_cm-1`
 - `notes`
+
+Outputs
+-------
+The script writes a summary table for the selected input source:
+- summary CSV in the output directory
+- summary HTML in the output directory
+
+Each output row represents one band and includes metadata such as band label,
+mode pair, line count, category, linked curve paths, and peak/center metrics.
 """
 
 from __future__ import annotations

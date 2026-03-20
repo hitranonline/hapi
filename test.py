@@ -7,7 +7,7 @@ import hapi  # classic HAPI module
 # -------------------------
 # For this classic hapi package, fetch() does not consume an API key directly.
 # Keep this variable only for your own reference if needed.
-API_KEY = "ecca270c-b058-4e49-b115-8af25236217d"
+API_KEY = "86677861-553f-4190-b391-950f9a40c94c"
 DB_DIR = "hitran_db"
 NU_MIN = 0.0      # cm^-1 Lower wavenumber bound (cm^-1).
 NU_MAX = 10000.0  # cm^-1 Upper wavenumber bound (cm^-1).
