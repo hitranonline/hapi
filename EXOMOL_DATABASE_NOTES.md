@@ -1,16 +1,18 @@
-# ExoMol Database Notes
+# ExoMol Database and Spectrum Modeling Notes
 
-This note explains how the ExoMol database is organized and how it is used in this repo, especially in [plot_exomol_ch4_mm_absorbance.py](/f:/GitHub/hapi/plot_exomol_ch4_mm_absorbance.py) and [scan_exomol_ch4_nu3_band_types.py](/f:/GitHub/hapi/scan_exomol_ch4_nu3_band_types.py).
+This note combines the ExoMol database overview and the ExoMol spectrum-modeling explanation for this repo.
+
+It focuses on the local CH4 MM workflow implemented in [plot_exomol_ch4_mm_absorbance.py](/f:/GitHub/hapi/plot_exomol_ch4_mm_absorbance.py), with related usage in [scan_exomol_ch4_nu3_band_types.py](/f:/GitHub/hapi/scan_exomol_ch4_nu3_band_types.py) and the ExoMol-to-HITRAN-style exporter [build_exomol_ch4_mm_hitran_db.py](/f:/GitHub/hapi/build_exomol_ch4_mm_hitran_db.py).
 
 ## Big Picture
 
-ExoMol is not arranged like a HITRAN-ready line list where each row directly gives:
+ExoMol is not arranged like a HITRAN-ready line list where each row already gives:
 
 - line center `nu`
 - reference line intensity `sw`
-- broadening fields
+- pressure-broadening fields
 
-Instead, ExoMol splits the information into separate files:
+Instead, ExoMol splits the information across separate files:
 
 - `.states`: one row per quantum state
 - `.trans`: one row per transition between two states
@@ -22,7 +24,9 @@ The main idea is:
 - each state is stored once in `.states`
 - transitions refer to states by ID in `.trans`
 - transition-specific radiative information is stored in `.trans`
-- temperature-dependent spectral quantities are derived later
+- temperature-dependent line quantities are derived later
+
+So ExoMol is state-plus-transition oriented, not line-list oriented in the same way as HITRAN.
 
 ## Why ExoMol Uses Separate `states` and `trans`
 
@@ -37,7 +41,7 @@ So ExoMol uses a normalized structure:
 
 This means each state energy only needs to be declared once.
 
-## What Each File Means
+## What Each ExoMol File Means
 
 ### `.states`
 
@@ -51,7 +55,7 @@ Each row defines a state such as:
 - quantum labels
 - symmetry labels
 
-In this repo, state energies and degeneracies are loaded by `load_state_arrays(...)` in [plot_exomol_ch4_mm_absorbance.py](/f:/GitHub/hapi/plot_exomol_ch4_mm_absorbance.py).
+In this repo, state energies and degeneracies are loaded by `load_state_arrays(...)` in [plot_exomol_ch4_mm_absorbance.py](/f:/GitHub/hapi/plot_exomol_ch4_mm_absorbance.py#L248) and more detailed state-label parsing is used in [extract_exomol_ch4_mm_pure_nu3_band_texts.py](/f:/GitHub/hapi/extract_exomol_ch4_mm_pure_nu3_band_texts.py).
 
 ### `.trans`
 
@@ -74,8 +78,9 @@ Those are derived later by combining `.trans` with `.states` and `.pf`.
 
 In this repo, transition rows are streamed in:
 
-- `collect_relevant_transitions(...)` in [plot_exomol_ch4_mm_absorbance.py](/f:/GitHub/hapi/plot_exomol_ch4_mm_absorbance.py)
+- `collect_relevant_transitions(...)` in [plot_exomol_ch4_mm_absorbance.py](/f:/GitHub/hapi/plot_exomol_ch4_mm_absorbance.py#L350)
 - the main scan loop in [scan_exomol_ch4_nu3_band_types.py](/f:/GitHub/hapi/scan_exomol_ch4_nu3_band_types.py)
+- the main conversion loop in [build_exomol_ch4_mm_hitran_db.py](/f:/GitHub/hapi/build_exomol_ch4_mm_hitran_db.py)
 
 ### `.pf`
 
@@ -86,7 +91,7 @@ In this repo it is read by:
 - `load_partition_function(...)`
 - `interpolate_partition_function(...)`
 
-both in [plot_exomol_ch4_mm_absorbance.py](/f:/GitHub/hapi/plot_exomol_ch4_mm_absorbance.py).
+in both [plot_exomol_ch4_mm_absorbance.py](/f:/GitHub/hapi/plot_exomol_ch4_mm_absorbance.py#L232) and [build_exomol_ch4_mm_hitran_db.py](/f:/GitHub/hapi/build_exomol_ch4_mm_hitran_db.py).
 
 ### `.def`
 
@@ -96,8 +101,13 @@ The `.def` file contains dataset metadata such as:
 - number of states
 - default Lorentz broadening width `gamma0`
 - temperature exponent `n_exponent`
+- quantum-label schema for the `.states` file
 
-In this repo it is read by `parse_def_file(...)` in [plot_exomol_ch4_mm_absorbance.py](/f:/GitHub/hapi/plot_exomol_ch4_mm_absorbance.py).
+In this repo it is read by:
+
+- `parse_def_file(...)` in [plot_exomol_ch4_mm_absorbance.py](/f:/GitHub/hapi/plot_exomol_ch4_mm_absorbance.py#L206)
+- `parse_exomol_def(...)` in [extract_exomol_ch4_mm_pure_nu3_band_texts.py](/f:/GitHub/hapi/extract_exomol_ch4_mm_pure_nu3_band_texts.py#L172)
+- `parse_exomol_def(...)` in [build_exomol_ch4_mm_hitran_db.py](/f:/GitHub/hapi/build_exomol_ch4_mm_hitran_db.py)
 
 ## How ExoMol Defines a Spectral Line
 
@@ -121,8 +131,9 @@ If the state energies are in `cm^-1`, then `nu0` is also in `cm^-1`.
 
 In this repo, that happens in:
 
-- `collect_relevant_transitions(...)` in [plot_exomol_ch4_mm_absorbance.py](/f:/GitHub/hapi/plot_exomol_ch4_mm_absorbance.py)
+- `collect_relevant_transitions(...)` in [plot_exomol_ch4_mm_absorbance.py](/f:/GitHub/hapi/plot_exomol_ch4_mm_absorbance.py#L350)
 - the scan loop in [scan_exomol_ch4_nu3_band_types.py](/f:/GitHub/hapi/scan_exomol_ch4_nu3_band_types.py)
+- the output-row builder in [build_exomol_ch4_mm_hitran_db.py](/f:/GitHub/hapi/build_exomol_ch4_mm_hitran_db.py)
 
 This is why ExoMol does not need to store the line center directly in `.trans`: it is already implied by the two state energies.
 
@@ -158,7 +169,8 @@ Instead, the line intensity is derived from:
 
 In this repo, that conversion is done by:
 
-- `lte_line_intensity_cm_per_molecule(...)` in [plot_exomol_ch4_mm_absorbance.py](/f:/GitHub/hapi/plot_exomol_ch4_mm_absorbance.py)
+- `lte_line_intensity_cm_per_molecule(...)` in [plot_exomol_ch4_mm_absorbance.py](/f:/GitHub/hapi/plot_exomol_ch4_mm_absorbance.py#L271)
+- `lte_line_intensity_cm_per_molecule(...)` in [build_exomol_ch4_mm_hitran_db.py](/f:/GitHub/hapi/build_exomol_ch4_mm_hitran_db.py)
 
 The output of that function is:
 
@@ -167,16 +179,16 @@ The output of that function is:
 
 This is not absorbance yet. It is the per-line strength before broadening is applied.
 
-## How Absorbance Is Built From ExoMol Data
+## Spectrum Modeling Pipeline in This Repo
 
-The spectrum-building pipeline is:
+The CH4 ExoMol MM modeling workflow in [plot_exomol_ch4_mm_absorbance.py](/f:/GitHub/hapi/plot_exomol_ch4_mm_absorbance.py) is:
 
 1. Read `.def`, `.states`, `.pf`, and the overlapping `.trans` files.
-2. For each transition, compute the line center from state energies.
+2. Reconstruct each line center from state energies.
 3. Convert Einstein-A into LTE line intensity `S(T)`.
-4. Apply a line profile such as Voigt.
-5. Add each broadened line onto the spectral grid.
-6. Sum all line contributions to get cross section.
+4. Keep only transitions in the requested spectral window and above the intensity threshold.
+5. Apply a Voigt profile to each kept line.
+6. Sum all broadened lines into a cross section.
 7. Convert cross section to absorbance for the chosen gas condition.
 
 ### Step 1: Stream the compressed ExoMol files
@@ -185,9 +197,26 @@ In this repo, `.states.bz2` and `.trans.bz2` are not converted into permanent `.
 
 They are decompressed in memory and parsed line by line by:
 
-- `iter_bz2_text_lines(...)` in [plot_exomol_ch4_mm_absorbance.py](/f:/GitHub/hapi/plot_exomol_ch4_mm_absorbance.py)
+- `iter_bz2_text_lines(...)` in [plot_exomol_ch4_mm_absorbance.py](/f:/GitHub/hapi/plot_exomol_ch4_mm_absorbance.py#L133)
+- equivalent streaming logic in [build_exomol_ch4_mm_hitran_db.py](/f:/GitHub/hapi/build_exomol_ch4_mm_hitran_db.py)
 
-### Step 2: Convert line intensity into a broadened line shape
+### Step 2: Keep only relevant transitions
+
+The script does not use every transition in the full database for a windowed spectrum.
+
+`collect_relevant_transitions(...)` in [plot_exomol_ch4_mm_absorbance.py](/f:/GitHub/hapi/plot_exomol_ch4_mm_absorbance.py#L350):
+
+- scans only the `.trans.bz2` chunks overlapping the requested spectral window
+- reconstructs the wavenumber of each transition
+- keeps only transitions in the requested range plus a line-wing margin
+- discards lines weaker than the chosen intensity threshold
+
+The kept outputs from that step are arrays of:
+
+- line centers
+- line intensities
+
+### Step 3: Convert line intensity into a broadened line shape
 
 Once a line has:
 
@@ -199,38 +228,49 @@ the script applies a profile.
 
 In this repo:
 
-- `voigt_profile_cm(...)` defines the Voigt line shape
-- `render_cross_section(...)` applies the profile and accumulates the result on the grid
-
-both in [plot_exomol_ch4_mm_absorbance.py](/f:/GitHub/hapi/plot_exomol_ch4_mm_absorbance.py).
+- `doppler_hwhm_cm(...)` computes Doppler broadening in [plot_exomol_ch4_mm_absorbance.py](/f:/GitHub/hapi/plot_exomol_ch4_mm_absorbance.py#L327)
+- `voigt_profile_cm(...)` defines the Voigt line shape in [plot_exomol_ch4_mm_absorbance.py](/f:/GitHub/hapi/plot_exomol_ch4_mm_absorbance.py#L333)
+- `render_cross_section(...)` applies the profile and accumulates the result on the grid in [plot_exomol_ch4_mm_absorbance.py](/f:/GitHub/hapi/plot_exomol_ch4_mm_absorbance.py#L414)
 
 Conceptually, one line contributes:
 
 ```text
-sigma_i(nu) = S_i * profile_i(nu - nu0_i)
+sigma_i(nu) = S_i(T) * profile_i(nu - nu0_i)
 ```
 
-The total cross section is the sum of all line contributions:
+where `profile_i` is normalized and centered at that line's `nu0_i`.
+
+### Step 4: Sum all lines into cross section
+
+The total cross section is the sum of all broadened lines:
 
 ```text
 sigma(nu) = sum_i sigma_i(nu)
 ```
 
-### Step 3: Convert cross section to absorbance
+In the code, `render_cross_section(...)` loops over kept transitions and adds each broadened contribution onto the spectral grid.
 
-In this repo, absorbance is computed as:
+The spectral grid is built in `main()` with:
 
 ```text
-absorbance = sigma(nu) * N_absorber * L
+grid = arange(wn_min, wn_max, wn_step)
 ```
 
-where:
+See [plot_exomol_ch4_mm_absorbance.py](/f:/GitHub/hapi/plot_exomol_ch4_mm_absorbance.py#L551).
 
-- `sigma(nu)` is the cross section
-- `N_absorber` is the absorber number density
-- `L` is path length
+### Step 5: Convert cross section to absorbance
 
-That final conversion is done in `main()` in [plot_exomol_ch4_mm_absorbance.py](/f:/GitHub/hapi/plot_exomol_ch4_mm_absorbance.py).
+After the cross section is built, the script converts it to absorbance using Beer-Lambert scaling:
+
+```text
+absorbance = cross_section * absorber_number_density * path_length
+```
+
+In this repo:
+
+- total number density comes from `number_density_cm3(...)` in [plot_exomol_ch4_mm_absorbance.py](/f:/GitHub/hapi/plot_exomol_ch4_mm_absorbance.py#L344)
+- absorber number density is total density times CH4 mole fraction
+- absorbance is computed in `main()` in [plot_exomol_ch4_mm_absorbance.py](/f:/GitHub/hapi/plot_exomol_ch4_mm_absorbance.py#L564)
 
 ## Where the Case Settings Are Set
 
@@ -238,13 +278,23 @@ In [plot_exomol_ch4_mm_absorbance.py](/f:/GitHub/hapi/plot_exomol_ch4_mm_absorba
 
 Important ones are:
 
+- `--wn-min`
+- `--wn-max`
+- `--wn-step`
 - `--temperature-k`
 - `--pressure-torr`
 - `--mole-fraction`
 - `--path-length-cm`
-- `--wn-min`
-- `--wn-max`
-- `--wn-step`
+- `--intensity-threshold`
+- `--line-cutoff`
+- optional overrides for `--gamma0` and `--n-exponent`
+
+These settings control:
+
+- which transitions are scanned
+- how strong the lines are at the chosen temperature
+- how wide the lines become after broadening
+- how the final cross section is scaled into absorbance
 
 If concentration is known in ppm, convert it to mole fraction before passing it in:
 
@@ -271,6 +321,14 @@ ExoMol is more state-plus-transition oriented:
 - `.trans` links them and stores `A`
 - the line center and line intensity are reconstructed later
 
+With ExoMol, the repo has to derive important quantities first:
+
+- line center from state energies
+- line intensity from Einstein `A` and `Q(T)`
+- pressure-broadened line shape from metadata plus case conditions
+
+So the ExoMol workflow is more of a reconstruction-and-modeling pipeline than a direct read-and-plot workflow.
+
 ## What Is the Same Between HITRAN and ExoMol
 
 Once you already have:
@@ -293,7 +351,7 @@ So the main difference between HITRAN and ExoMol is earlier in the pipeline:
 
 ## Practical Summary
 
-If you want the shortest possible mental model:
+The shortest possible mental model:
 
 - HITRAN: each row already looks like a spectral line
 - ExoMol: reconstruct each spectral line from state IDs plus Einstein-A
@@ -306,3 +364,7 @@ For ExoMol in this repo:
 - line intensity comes from `A` plus temperature-dependent physics
 - Voigt broadening turns each line into a smooth function on the grid
 - summed cross section is converted to absorbance using number density and path length
+
+For the local CH4 MM modeling script, the short workflow answer is:
+
+ExoMol gives state energies, degeneracies, Einstein `A`, and `Q(T)`. The repo reconstructs each line center, computes temperature-dependent line intensity, broadens each line with a Voigt profile, sums the contributions into cross section, and then converts cross section to absorbance.

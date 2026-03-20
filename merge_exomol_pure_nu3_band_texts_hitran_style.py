@@ -9,7 +9,8 @@ Input
 Behavior
 --------
 - Groups exported ExoMol band text files by `band_label_hitran_style`
-- Ignores the finer `L3/M3` subdivision used in the source files
+- Ignores all fine-grained MM labels other than `n1`, `n2`, `n3`, `n4`, and
+  `Gtot` when collapsing to the coarse HITRAN-style grouping
 - Concatenates data rows from each matching source file into one merged file
 
 Outputs
@@ -49,8 +50,8 @@ DATA_HEADER = (
 STATE_LABEL_PATTERN = re.compile(
     r"^\s*"
     r"(?P<n1>\d+)\s+(?P<n2>\d+)\s+(?P<n3>\d+)\s+(?P<n4>\d+)\s+"
-    r"Gtot=(?P<gtot>\S+)\s+Gvib=(?P<gvib>\S+)\s+Grot=(?P<grot>\S+)\s+"
-    r"L3=(?P<l3>\d+)\s+M3=(?P<m3>\d+)\s*$"
+    r"Gtot=(?P<gtot>\S+)"
+    r"(?:\s+.*)?\s*$"
 )
 
 

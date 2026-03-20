@@ -40,21 +40,27 @@ Outputs
 
 Band labeling used by this extractor
 ------------------------------------
-The MM `.states` schema defines many ExoMol quantum labels, but this extractor
-groups states using only a subset: `n1`, `n2`, `n3`, `n4`, `Gtot`, `Gvib`,
-`Grot`, `L3`, and `M3`.
+The MM `.states` schema defines many ExoMol quantum labels plus auxiliary
+titles. This extractor now preserves the full labeled MM state signature in the
+exported band label:
 
-That means this script intentionally omits other MM labels such as `P`, `Pnum`,
-`L2`, `L4`, `M4`, `irot`, `ivib`, `Coef`, `v1`-`v9`, and `SourceType` when it
-decides whether two states belong to the same exported band signature.
+- leading mode counters: `n1`, `n2`, `n3`, `n4`
+- total symmetry: `Gtot`
+- all remaining MM quantum labels from `.def`
+- all auxiliary titles from `.def`
+
+The only state fields not included in the grouping key are the standard base
+columns such as `i`, `E`, `gtot`, `J`, `unc`, and `lifetime`, because those are
+per-state bookkeeping/physical values rather than the named MM label set.
 """
 
 from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import re
-from collections import defaultdict
+from collections import OrderedDict, defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TextIO
@@ -77,6 +83,7 @@ from plot_exomol_ch4_mm_absorbance import (
 
 OUTPUT_DIR = ROOT_DIR / "exomol_ch4_mm_pure_nu3_band_texts"
 SUMMARY_CSV_NAME = "exomol_pure_nu3_band_text_summary.csv"
+MAX_OPEN_OUTPUTS = 128
 HITRAN_STYLE_MAP = {
     "A1": "1A1",
     "A2": "1A2",
@@ -90,11 +97,9 @@ HITRAN_STYLE_MAP = {
 
 @dataclass(frozen=True)
 class BandSignature:
-    # TODO: label organization is still incomplete; some ExoMol MM labels are
-    # still omitted here and this extractor has not finished that cleanup task.
-    """Subset of ExoMol MM state labels used to define an exported band.
+    """Full labeled ExoMol MM state signature used to define an exported band.
 
-    Meanings of the labels kept here:
+    Fields kept explicitly for filtering/grouping:
     - `n1`: A1-symmetry normal-mode quantum number.
     - `n2`: E-symmetry normal-mode quantum number.
     - `n3`: F1-symmetry normal-mode quantum number; this is the `nu3` mode that
@@ -102,30 +107,51 @@ class BandSignature:
     - `n4`: F2-symmetry normal-mode quantum number.
     - `gtot_sym`: ExoMol quantum label `Gtot`, the total Td symmetry label of
       the state. This is not the numeric lower-case `gtot` degeneracy column.
-    - `gvib`: ExoMol quantum label `Gvib`, the vibrational symmetry label.
-    - `grot`: ExoMol quantum label `Grot`, the rotational symmetry label.
-    - `l3`: ExoMol quantum label `L3`, the vibrational angular-momentum quantum
-      number associated with mode 3.
-    - `m3`: ExoMol quantum label `M3`, the multiplicity index associated with
-      mode 3.
+    - `other_labels`: ordered `(name, value)` pairs covering every remaining MM
+      quantum label and auxiliary title defined in `.def`, preserving the values
+      from the `.states` row. This includes labels such as `P`, `Pnum`, `L2`,
+      `L3`, `M3`, `L4`, `M4`, `Gvib`, `irot`, `Grot`, `ivib`, `Coef`, `v1`-`v9`,
+      `SourceType`, and `Ecal`.
 
-    Important limitation:
-    - This is not the full ExoMol MM label set.
-    - Labels present in the MM `.def/.states` schema but omitted here include
-      `P`, `Pnum`, `L2`, `L4`, `M4`, `irot`, `ivib`, `Coef`, `v1`-`v9`, and
-      the auxiliary title `SourceType`.
-    - As a result, two states that differ only in one of those omitted labels
-      will collapse to the same `BandSignature` in this extractor.
+    Base state fields like `i`, `E`, `gtot`, `J`, `unc`, and `lifetime` are not
+    stored here; those are standard state-table columns rather than MM labels,
+    and including them would turn the export into a near one-state-per-band
+    grouping instead of a label-defined band grouping.
     """
     n1: int
     n2: int
     n3: int
     n4: int
     gtot_sym: str
-    gvib: str
-    grot: str
-    l3: int
-    m3: int
+    other_labels: tuple[tuple[str, str], ...]
+
+
+# ExoMol MM state labels defined in `12C-1H4__MM.def`:
+# - `Gtot`: total Td symmetry of the full state.
+# - `P`: polyad number.
+# - `Pnum`: polyad counting number.
+# - `n1`: A1-symmetry normal-mode quantum number.
+# - `n2`: E-symmetry normal-mode quantum number.
+# - `L2`: vibrational angular-momentum quantum number for mode 2.
+# - `n3`: F1-symmetry normal-mode quantum number.
+# - `L3`: vibrational angular-momentum quantum number for mode 3.
+# - `M3`: multiplicity index for mode 3.
+# - `n4`: F2-symmetry normal-mode quantum number.
+# - `L4`: vibrational angular-momentum quantum number for mode 4.
+# - `M4`: multiplicity index for mode 4.
+# - `Gvib`: vibrational symmetry.
+# - `irot`: index in the rotational symmetry block.
+# - `Grot`: rotational symmetry.
+# - `ivib`: index in the vibrational symmetry block.
+# - `Coef`: coefficient of the largest basis-function contribution.
+# - `v1`-`v9`: local-mode vibrational quantum numbers.
+# - auxiliary `SourceType`: state provenance flag
+#   (`Ma` MARVEL, `Ca` calculated, `EH` effective Hamiltonian,
+#   `IE` isotopologue extrapolation).
+# - auxiliary `Ecal`: calculated energy in cm^-1.
+# This extractor keeps `n1`, `n2`, `n3`, `n4`, and `Gtot` explicitly, then
+# stores every remaining MM quantum label and auxiliary title in
+# `BandSignature.other_labels` in the order defined by `.def`.
 
 
 def parse_args() -> argparse.Namespace:
@@ -238,26 +264,33 @@ def states_column_indices(def_metadata: dict[str, object]) -> dict[str, int]:
     return {name: index for index, name in enumerate(all_columns)}
 
 
-def build_signature(parts: list[str], column_indices: dict[str, int]) -> BandSignature:
+def signature_label_names(def_metadata: dict[str, object]) -> list[str]:
+    excluded = {"Gtot", "n1", "n2", "n3", "n4"}
+    ordered_names = list(def_metadata["ordered_quantum_labels"]) + list(def_metadata["ordered_auxiliary_titles"])
+    return [name for name in ordered_names if name not in excluded]
+
+
+def build_signature(
+    parts: list[str],
+    column_indices: dict[str, int],
+    extra_label_names: list[str],
+) -> BandSignature:
     return BandSignature(
         n1=int(parts[column_indices["n1"]]),
         n2=int(parts[column_indices["n2"]]),
         n3=int(parts[column_indices["n3"]]),
         n4=int(parts[column_indices["n4"]]),
         gtot_sym=parts[column_indices["Gtot"]],
-        gvib=parts[column_indices["Gvib"]],
-        grot=parts[column_indices["Grot"]],
-        l3=int(parts[column_indices["L3"]]),
-        m3=int(parts[column_indices["M3"]]),
+        other_labels=tuple((name, parts[column_indices[name]]) for name in extra_label_names),
     )
 
 
 def exomol_signature_label(signature: BandSignature) -> str:
-    return (
-        f"{signature.n1} {signature.n2} {signature.n3} {signature.n4} "
-        f"Gtot={signature.gtot_sym} Gvib={signature.gvib} Grot={signature.grot} "
-        f"L3={signature.l3} M3={signature.m3}"
-    )
+    tail = " ".join(f"{name}={value}" for name, value in signature.other_labels)
+    label = f"{signature.n1} {signature.n2} {signature.n3} {signature.n4} Gtot={signature.gtot_sym}"
+    if tail:
+        label += f" {tail}"
+    return label
 
 
 def hitran_style_signature_label(signature: BandSignature) -> str:
@@ -270,11 +303,12 @@ def safe_label_fragment(value: str) -> str:
 
 
 def signature_stem(signature: BandSignature) -> str:
-    # Build a stable filename stem from one ExoMol band signature.
+    # Full MM labels are too verbose for a safe Windows path, so filenames keep
+    # the core mode counters plus a stable digest of the full signature label.
+    digest = hashlib.sha1(exomol_signature_label(signature).encode("utf-8")).hexdigest()[:12]
     return (
         f"{signature.n1}_{signature.n2}_{signature.n3}_{signature.n4}_"
-        f"Gtot_{signature.gtot_sym}_Gvib_{signature.gvib}_Grot_{signature.grot}"
-        f"_L3_{signature.l3}_M3_{signature.m3}"
+        f"Gtot_{safe_label_fragment(signature.gtot_sym)}_{digest}"
     )
 
 
@@ -296,6 +330,7 @@ def load_state_arrays(
     states_path: Path,
     nstates: int,
     column_indices: dict[str, int],
+    extra_label_names: list[str],
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, list[BandSignature | None]]:
     energies = np.empty(nstates + 1, dtype=np.float64)
     g_totals = np.empty(nstates + 1, dtype=np.float64)
@@ -306,7 +341,7 @@ def load_state_arrays(
     signature_lookup: list[BandSignature | None] = [None]
     signature_to_id: dict[BandSignature, int] = {}
 
-    required_labels = {"n1", "n2", "n3", "n4", "Gtot", "Gvib", "Grot", "L3", "M3"}
+    required_labels = {"n1", "n2", "n3", "n4", "Gtot"} | set(extra_label_names)
     missing_labels = required_labels - column_indices.keys()
     if missing_labels:
         raise RuntimeError(f"Missing required state columns: {sorted(missing_labels)}")
@@ -320,7 +355,7 @@ def load_state_arrays(
         energies[state_id] = float(parts[column_indices["E"]])
         g_totals[state_id] = float(parts[column_indices["gtot"]])
 
-        signature = build_signature(parts, column_indices)
+        signature = build_signature(parts, column_indices, extra_label_names)
         if signature.n1 != 0 or signature.n2 != 0 or signature.n4 != 0:
             continue
 
@@ -440,6 +475,7 @@ def main() -> None:
 
     def_metadata = parse_exomol_def(def_path)
     column_indices = states_column_indices(def_metadata)
+    extra_label_names = signature_label_names(def_metadata)
     pf_temperatures, pf_values = load_partition_function(pf_path)
     partition_function = interpolate_partition_function(
         pf_temperatures,
@@ -452,12 +488,13 @@ def main() -> None:
         states_path,
         int(def_metadata["nstates"]),
         column_indices,
+        extra_label_names,
     )
 
     transition_files = transition_files_for_args(args)
     print(f"scanning {len(transition_files)} transition files")
 
-    output_handles: dict[tuple[int, int], TextIO] = {}
+    output_handles: OrderedDict[tuple[int, int], TextIO] = OrderedDict()
     band_rows: dict[tuple[int, int], dict[str, object]] = {}
     stats = defaultdict(int)
     stats["files"] = len(transition_files)
@@ -511,37 +548,51 @@ def main() -> None:
                 key = (lower_signature_id, upper_signature_id)
                 handle = output_handles.get(key)
                 if handle is None:
-                    out_path = output_path_for_band(
-                        args.output_dir,
-                        lower_signature,
-                        upper_signature,
-                        args.reference_temperature_k,
-                    )
-                    handle = out_path.open("w", encoding="utf-8", newline="")
-                    write_file_preamble(
-                        handle,
-                        lower_signature=lower_signature,
-                        upper_signature=upper_signature,
-                        reference_temperature_k=args.reference_temperature_k,
-                        wn_min=args.wn_min,
-                        wn_max=args.wn_max,
-                    )
+                    is_new_band = key not in band_rows
+                    if is_new_band:
+                        out_path = output_path_for_band(
+                            args.output_dir,
+                            lower_signature,
+                            upper_signature,
+                            args.reference_temperature_k,
+                        )
+                        band_rows[key] = {
+                            "band_label": f"{exomol_signature_label(lower_signature)} -> {exomol_signature_label(upper_signature)}",
+                            "band_label_hitran_style": (
+                                f"{hitran_style_signature_label(lower_signature)} -> "
+                                f"{hitran_style_signature_label(upper_signature)}"
+                            ),
+                            "mode_pair": f"nu3 {lower_signature.n3}->{upper_signature.n3}",
+                            "line_count": 0,
+                            "reference_temperature_k": args.reference_temperature_k,
+                            "wn_min_cm-1": "" if args.wn_min is None else args.wn_min,
+                            "wn_max_cm-1": "" if args.wn_max is None else args.wn_max,
+                            "txt_path": str(out_path),
+                            "sort_lower_q": lower_signature.n3,
+                            "sort_upper_q": upper_signature.n3,
+                        }
+                        open_mode = "w"
+                    else:
+                        out_path = Path(str(band_rows[key]["txt_path"]))
+                        open_mode = "a"
+
+                    if len(output_handles) >= MAX_OPEN_OUTPUTS:
+                        _, old_handle = output_handles.popitem(last=False)
+                        old_handle.close()
+
+                    handle = out_path.open(open_mode, encoding="utf-8", newline="")
+                    if is_new_band:
+                        write_file_preamble(
+                            handle,
+                            lower_signature=lower_signature,
+                            upper_signature=upper_signature,
+                            reference_temperature_k=args.reference_temperature_k,
+                            wn_min=args.wn_min,
+                            wn_max=args.wn_max,
+                        )
                     output_handles[key] = handle
-                    band_rows[key] = {
-                        "band_label": f"{exomol_signature_label(lower_signature)} -> {exomol_signature_label(upper_signature)}",
-                        "band_label_hitran_style": (
-                            f"{hitran_style_signature_label(lower_signature)} -> "
-                            f"{hitran_style_signature_label(upper_signature)}"
-                        ),
-                        "mode_pair": f"nu3 {lower_signature.n3}->{upper_signature.n3}",
-                        "line_count": 0,
-                        "reference_temperature_k": args.reference_temperature_k,
-                        "wn_min_cm-1": "" if args.wn_min is None else args.wn_min,
-                        "wn_max_cm-1": "" if args.wn_max is None else args.wn_max,
-                        "txt_path": str(out_path),
-                        "sort_lower_q": lower_signature.n3,
-                        "sort_upper_q": upper_signature.n3,
-                    }
+                else:
+                    output_handles.move_to_end(key)
 
                 handle.write(
                     f"{upper_id}\t{lower_id}\t{float(energies[upper_id]):.10f}\t{float(energies[lower_id]):.10f}\t"
