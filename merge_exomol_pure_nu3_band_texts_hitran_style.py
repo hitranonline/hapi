@@ -27,7 +27,7 @@ import re
 from collections import defaultdict
 from pathlib import Path
 
-from plot_exomol_ch4_mm_absorbance import ROOT_DIR
+ROOT_DIR = Path(__file__).resolve().parent
 
 
 DEFAULT_INPUT_DIR = ROOT_DIR / "exomol_ch4_mm_pure_nu3_band_texts"
@@ -43,15 +43,28 @@ HITRAN_STYLE_MAP = {
     "T1": "1F1",
     "T2": "1F2",
 }
-DATA_HEADER = (
-    "upper_id\tlower_id\tupper_energy_cm-1\tlower_energy_cm-1\twavenumber_cm-1\t"
-    "einstein_A_s-1\tline_intensity_cm_per_molecule"
-)
+DATA_COLUMNS = [
+    "upper_id",
+    "lower_id",
+    "upper_energy_cm-1",
+    "lower_energy_cm-1",
+    "wavenumber_cm-1",
+    "einstein_A_s-1",
+    "line_intensity_cm_per_molecule",
+    "local_upper_quanta",
+    "local_lower_quanta",
+]
+DATA_HEADER = "\t".join(DATA_COLUMNS)
 STATE_LABEL_PATTERN = re.compile(
     r"^\s*"
     r"(?P<n1>\d+)\s+(?P<n2>\d+)\s+(?P<n3>\d+)\s+(?P<n4>\d+)\s+"
     r"Gtot=(?P<gtot>\S+)"
     r"(?:\s+.*)?\s*$"
+)
+COARSE_STATE_LABEL_PATTERN = re.compile(
+    r"^\s*"
+    r"(?P<n1>\d+)\s+(?P<n2>\d+)\s+(?P<n3>\d+)\s+(?P<n4>\d+)\s+"
+    r"(?P<gtot>\S+)\s*$"
 )
 
 
@@ -90,6 +103,7 @@ def output_path_for_band(output_dir: Path, band_label_hitran_style: str, referen
 
 def iter_data_lines(txt_path: Path) -> tuple[list[str], str]:
     preamble: list[str] = []
+    found_header = False
     with txt_path.open("r", encoding="utf-8", newline="") as handle:
         for raw_line in handle:
             line = raw_line.rstrip("\r\n")
@@ -98,9 +112,16 @@ def iter_data_lines(txt_path: Path) -> tuple[list[str], str]:
             if line.startswith("#"):
                 preamble.append(line)
                 continue
-            if line == DATA_HEADER:
+
+            if not found_header:
+                if line != DATA_HEADER:
+                    raise RuntimeError(f"Unexpected data header in {txt_path}: {line}")
+                found_header = True
                 continue
             yield preamble, line
+
+    if not found_header:
+        raise RuntimeError(f"Missing data header in {txt_path}")
 
 
 def load_rows(summary_csv: Path) -> list[dict[str, str]]:
@@ -109,30 +130,28 @@ def load_rows(summary_csv: Path) -> list[dict[str, str]]:
         return list(reader)
 
 
+def coarse_labels_from_state_label(state_label: str) -> tuple[str, str]:
+    match = STATE_LABEL_PATTERN.fullmatch(state_label)
+    if match is None:
+        match = COARSE_STATE_LABEL_PATTERN.fullmatch(state_label)
+    if match is None:
+        raise ValueError(f"Unexpected ExoMol state label: {state_label}")
+
+    exomol_label = (
+        f"{match.group('n1')} {match.group('n2')} {match.group('n3')} "
+        f"{match.group('n4')} {match.group('gtot')}"
+    )
+    hitran_label = (
+        f"{match.group('n1')} {match.group('n2')} {match.group('n3')} "
+        f"{match.group('n4')} {HITRAN_STYLE_MAP.get(match.group('gtot'), match.group('gtot'))}"
+    )
+    return exomol_label, hitran_label
+
+
 def coarse_labels_from_band_label(band_label: str) -> tuple[str, str]:
     lower_label, upper_label = [part.strip() for part in band_label.split("->", maxsplit=1)]
-    lower_match = STATE_LABEL_PATTERN.fullmatch(lower_label)
-    upper_match = STATE_LABEL_PATTERN.fullmatch(upper_label)
-    if lower_match is None or upper_match is None:
-        raise ValueError(f"Unexpected ExoMol band label: {band_label}")
-
-    lower_exomol = (
-        f"{lower_match.group('n1')} {lower_match.group('n2')} {lower_match.group('n3')} "
-        f"{lower_match.group('n4')} {lower_match.group('gtot')}"
-    )
-    upper_exomol = (
-        f"{upper_match.group('n1')} {upper_match.group('n2')} {upper_match.group('n3')} "
-        f"{upper_match.group('n4')} {upper_match.group('gtot')}"
-    )
-
-    lower_hitran = (
-        f"{lower_match.group('n1')} {lower_match.group('n2')} {lower_match.group('n3')} "
-        f"{lower_match.group('n4')} {HITRAN_STYLE_MAP.get(lower_match.group('gtot'), lower_match.group('gtot'))}"
-    )
-    upper_hitran = (
-        f"{upper_match.group('n1')} {upper_match.group('n2')} {upper_match.group('n3')} "
-        f"{upper_match.group('n4')} {HITRAN_STYLE_MAP.get(upper_match.group('gtot'), upper_match.group('gtot'))}"
-    )
+    lower_exomol, lower_hitran = coarse_labels_from_state_label(lower_label)
+    upper_exomol, upper_hitran = coarse_labels_from_state_label(upper_label)
     return f"{lower_exomol} -> {upper_exomol}", f"{lower_hitran} -> {upper_hitran}"
 
 

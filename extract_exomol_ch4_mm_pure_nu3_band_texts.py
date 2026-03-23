@@ -57,33 +57,40 @@ per-state bookkeeping/physical values rather than the named MM label set.
 from __future__ import annotations
 
 import argparse
+import bz2
 import csv
 import hashlib
+import math
 import re
+from array import array
+from bisect import bisect_left
 from collections import OrderedDict, defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TextIO
 
-import numpy as np
-
-from plot_exomol_ch4_mm_absorbance import (
-    DATASET_STEM,
-    DATA_DIR,
-    ROOT_DIR,
-    available_transition_starts,
-    interpolate_partition_function,
-    iter_bz2_text_lines,
-    load_partition_function,
-    lte_line_intensity_cm_per_molecule,
-    overlapping_transition_files,
-    transition_filename,
-)
+ROOT_DIR = Path(__file__).resolve().parent
+DATA_DIR = ROOT_DIR / "exomol_db" / "CH4" / "12C-1H4" / "MM"
+DATASET_STEM = "12C-1H4__MM"
+SECOND_RADIATION_CONSTANT_CM_K = 1.438776877
+LIGHT_SPEED_CM_S = 2.99792458e10
 
 
 OUTPUT_DIR = ROOT_DIR / "exomol_ch4_mm_pure_nu3_band_texts"
 SUMMARY_CSV_NAME = "exomol_pure_nu3_band_text_summary.csv"
 MAX_OPEN_OUTPUTS = 128
+DATA_COLUMNS = [
+    "upper_id",
+    "lower_id",
+    "upper_energy_cm-1",
+    "lower_energy_cm-1",
+    "wavenumber_cm-1",
+    "einstein_A_s-1",
+    "line_intensity_cm_per_molecule",
+    "local_upper_quanta",
+    "local_lower_quanta",
+]
+DATA_HEADER = "\t".join(DATA_COLUMNS)
 HITRAN_STYLE_MAP = {
     "A1": "1A1",
     "A2": "1A2",
@@ -93,6 +100,138 @@ HITRAN_STYLE_MAP = {
     "T1": "1F1",
     "T2": "1F2",
 }
+
+
+def iter_bz2_text_lines(path: Path, chunk_size: int = 8 * 1024 * 1024):
+    decompressor = bz2.BZ2Decompressor()
+    pending = b""
+
+    with path.open("rb") as handle:
+        while True:
+            chunk = handle.read(chunk_size)
+            if not chunk:
+                break
+
+            data = decompressor.decompress(chunk)
+            if not data:
+                continue
+
+            pending += data
+            lines = pending.split(b"\n")
+            pending = lines.pop()
+            for line in lines:
+                yield line.decode("utf-8").rstrip("\r")
+
+        if pending:
+            yield pending.decode("utf-8").rstrip("\r")
+
+
+def transition_filename(start_cm: int) -> str:
+    return f"{DATASET_STEM}__{start_cm:05d}-{start_cm + 100:05d}.trans.bz2"
+
+
+def available_transition_starts(data_dir: Path) -> list[int]:
+    starts: list[int] = []
+    pattern = re.compile(rf"^{re.escape(DATASET_STEM)}__(\d{{5}})-(\d{{5}})\.trans\.bz2$")
+    for path in data_dir.glob(f"{DATASET_STEM}__*.trans.bz2"):
+        match = pattern.match(path.name)
+        if match is None:
+            continue
+        start_cm = int(match.group(1))
+        end_cm = int(match.group(2))
+        if end_cm != start_cm + 100:
+            continue
+        starts.append(start_cm)
+    if not starts:
+        raise FileNotFoundError(f"No ExoMol transition files found in {data_dir}")
+    return sorted(starts)
+
+
+def overlapping_transition_files(data_dir: Path, wn_min: float, wn_max: float, wing: float) -> tuple[list[Path], float]:
+    available_starts = available_transition_starts(data_dir)
+    available_min = available_starts[0]
+    available_max = available_starts[-1] + 100
+
+    start_chunk = int(math.floor(max(0.0, wn_min - wing) / 100.0) * 100)
+    end_chunk = int(math.ceil((wn_max + wing) / 100.0) * 100)
+
+    clipped_start = max(start_chunk, available_min)
+    clipped_end = min(end_chunk, available_max)
+    if clipped_end <= clipped_start:
+        raise FileNotFoundError(f"No available transition files overlap {wn_min:g}-{wn_max:g} cm^-1 in {data_dir}")
+
+    effective_wing = wing
+    if clipped_start > start_chunk:
+        effective_wing = min(effective_wing, max(0.0, wn_min - clipped_start))
+    if clipped_end < end_chunk:
+        effective_wing = min(effective_wing, max(0.0, clipped_end - wn_max))
+
+    files = []
+    for start_cm in range(clipped_start, clipped_end, 100):
+        path = data_dir / transition_filename(start_cm)
+        if not path.exists():
+            raise FileNotFoundError(f"Missing transition file: {path}")
+        files.append(path)
+    return files, effective_wing
+
+
+def load_partition_function(pf_path: Path) -> tuple[list[float], list[float]]:
+    temperatures: list[float] = []
+    partition_values: list[float] = []
+    with pf_path.open("r", encoding="utf-8") as handle:
+        for raw_line in handle:
+            parts = raw_line.split()
+            if len(parts) < 2:
+                continue
+            temperatures.append(float(parts[0]))
+            partition_values.append(float(parts[1]))
+
+    if not temperatures:
+        raise RuntimeError(f"Unexpected partition function format in {pf_path}")
+    return temperatures, partition_values
+
+
+def interpolate_partition_function(temperatures: list[float], partition_values: list[float], temperature_k: float) -> float:
+    if temperature_k < temperatures[0] or temperature_k > temperatures[-1]:
+        raise ValueError(
+            f"Temperature {temperature_k:g} K is outside the partition-function range "
+            f"{temperatures[0]:g}-{temperatures[-1]:g} K"
+        )
+
+    index = bisect_left(temperatures, temperature_k)
+    if index < len(temperatures) and temperatures[index] == temperature_k:
+        return partition_values[index]
+    if index == 0 or index == len(temperatures):
+        raise ValueError(f"Cannot interpolate partition function at {temperature_k:g} K")
+
+    lower_temperature = temperatures[index - 1]
+    upper_temperature = temperatures[index]
+    lower_value = partition_values[index - 1]
+    upper_value = partition_values[index]
+    fraction = (temperature_k - lower_temperature) / (upper_temperature - lower_temperature)
+    return lower_value + fraction * (upper_value - lower_value)
+
+
+def lte_line_intensity_cm_per_molecule(
+    wavenumber: float,
+    a_coefficient: float,
+    g_upper: float,
+    lower_energy_cm: float,
+    temperature_k: float,
+    partition_function: float,
+) -> float:
+    if wavenumber <= 0.0:
+        return 0.0
+
+    boltzmann = math.exp(-SECOND_RADIATION_CONSTANT_CM_K * lower_energy_cm / temperature_k)
+    stimulated = 1.0 - math.exp(-SECOND_RADIATION_CONSTANT_CM_K * wavenumber / temperature_k)
+    return (
+        g_upper
+        * a_coefficient
+        * boltzmann
+        * stimulated
+        / (8.0 * math.pi * LIGHT_SPEED_CM_S * wavenumber * wavenumber * partition_function)
+    )
 
 
 @dataclass(frozen=True)
@@ -180,6 +319,12 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         default=False,
         help="Require a unit-step pure nu3 progression, e.g. 0->1 or 1->2.",
+    )
+    parser.add_argument(
+        "--group-by",
+        choices=("exact", "hitran-style"),
+        default="exact",
+        help="Group exported files by the exact MM state signature or directly by the coarse HITRAN-style band label.",
     )
     return parser.parse_args()
 
@@ -293,6 +438,10 @@ def exomol_signature_label(signature: BandSignature) -> str:
     return label
 
 
+def exomol_coarse_signature_label(signature: BandSignature) -> str:
+    return f"{signature.n1} {signature.n2} {signature.n3} {signature.n4} {signature.gtot_sym}"
+
+
 def hitran_style_signature_label(signature: BandSignature) -> str:
     hitran_symmetry = HITRAN_STYLE_MAP.get(signature.gtot_sym, signature.gtot_sym)
     return f"{signature.n1} {signature.n2} {signature.n3} {signature.n4} {hitran_symmetry}"
@@ -300,6 +449,40 @@ def hitran_style_signature_label(signature: BandSignature) -> str:
 
 def safe_label_fragment(value: str) -> str:
     return re.sub(r"[^A-Za-z0-9]+", "_", value).strip("_") or "000"
+
+
+def format_j_value(value: str) -> str:
+    j_value = float(value)
+    if abs(j_value - round(j_value)) < 1.0e-9:
+        return str(int(round(j_value)))
+    return f"{j_value:g}"
+
+
+def compact_local_quanta(parts: list[str], column_indices: dict[str, int]) -> str:
+    required_labels = {"Grot", "irot"}
+    missing_labels = required_labels - column_indices.keys()
+    if missing_labels:
+        raise RuntimeError(f"Missing required state columns for local quanta: {sorted(missing_labels)}")
+
+    j_text = format_j_value(parts[column_indices["J"]])
+    grot = parts[column_indices["Grot"]].strip() or "000"
+    irot = int(parts[column_indices["irot"]])
+    return f"J{j_text} {grot} {irot}"
+
+
+def float_array(length: int) -> array:
+    return array("d", [math.nan]) * length
+
+
+def int_array(length: int) -> array:
+    return array("I", [0]) * length
+
+
+def all_values_present(values: array) -> bool:
+    for value in values[1:]:
+        if math.isnan(value):
+            return False
+    return True
 
 
 def signature_stem(signature: BandSignature) -> str:
@@ -326,20 +509,50 @@ def output_path_for_band(
     return output_dir / filename
 
 
+def output_path_for_hitran_style_band(
+    output_dir: Path,
+    band_label_hitran_style: str,
+    reference_temperature_k: float,
+) -> Path:
+    lower_label, upper_label = [part.strip() for part in band_label_hitran_style.split("->", maxsplit=1)]
+    filename = (
+        "EXOMOL_CH4_MM_pure_nu3_hitran_style_"
+        f"{safe_label_fragment(lower_label)}_to_{safe_label_fragment(upper_label)}"
+        f"_T{reference_temperature_k:g}K.txt"
+    )
+    return output_dir / filename
+
+
+def band_label_pair(
+    lower_signature: BandSignature,
+    upper_signature: BandSignature,
+    group_by: str,
+) -> tuple[str, str]:
+    if group_by == "hitran-style":
+        band_label = f"{exomol_coarse_signature_label(lower_signature)} -> {exomol_coarse_signature_label(upper_signature)}"
+    else:
+        band_label = f"{exomol_signature_label(lower_signature)} -> {exomol_signature_label(upper_signature)}"
+    band_label_hitran_style = (
+        f"{hitran_style_signature_label(lower_signature)} -> {hitran_style_signature_label(upper_signature)}"
+    )
+    return band_label, band_label_hitran_style
+
+
 def load_state_arrays(
     states_path: Path,
     nstates: int,
     column_indices: dict[str, int],
     extra_label_names: list[str],
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, list[BandSignature | None]]:
-    energies = np.empty(nstates + 1, dtype=np.float64)
-    g_totals = np.empty(nstates + 1, dtype=np.float64)
-    signature_ids = np.zeros(nstates + 1, dtype=np.int32)
-    energies.fill(np.nan)
-    g_totals.fill(np.nan)
+) -> tuple[array, array, array, list[BandSignature | None], array, list[str]]:
+    energies = float_array(nstates + 1)
+    g_totals = float_array(nstates + 1)
+    signature_ids = int_array(nstates + 1)
+    local_label_ids = int_array(nstates + 1)
 
     signature_lookup: list[BandSignature | None] = [None]
     signature_to_id: dict[BandSignature, int] = {}
+    local_labels = ["000"]
+    local_label_to_id = {"000": 0}
 
     required_labels = {"n1", "n2", "n3", "n4", "Gtot"} | set(extra_label_names)
     missing_labels = required_labels - column_indices.keys()
@@ -355,6 +568,14 @@ def load_state_arrays(
         energies[state_id] = float(parts[column_indices["E"]])
         g_totals[state_id] = float(parts[column_indices["gtot"]])
 
+        local_label = compact_local_quanta(parts, column_indices)
+        local_label_id = local_label_to_id.get(local_label)
+        if local_label_id is None:
+            local_label_id = len(local_labels)
+            local_labels.append(local_label)
+            local_label_to_id[local_label] = local_label_id
+        local_label_ids[state_id] = local_label_id
+
         signature = build_signature(parts, column_indices, extra_label_names)
         if signature.n1 != 0 or signature.n2 != 0 or signature.n4 != 0:
             continue
@@ -369,10 +590,10 @@ def load_state_arrays(
         if line_number % 1_000_000 == 0:
             print(f"loaded {line_number:,} states")
 
-    if np.isnan(energies[1:]).any() or np.isnan(g_totals[1:]).any():
+    if not all_values_present(energies) or not all_values_present(g_totals):
         raise RuntimeError(f"State table {states_path} did not fill all expected state IDs")
 
-    return energies, g_totals, signature_ids, signature_lookup
+    return energies, g_totals, signature_ids, signature_lookup, local_label_ids, local_labels
 
 
 def transition_files_for_args(args: argparse.Namespace) -> list[Path]:
@@ -406,8 +627,8 @@ def is_allowed_progression(
 def write_file_preamble(
     handle: TextIO,
     *,
-    lower_signature: BandSignature,
-    upper_signature: BandSignature,
+    band_label: str,
+    band_label_hitran_style: str,
     reference_temperature_k: float,
     wn_min: float | None,
     wn_max: float | None,
@@ -416,19 +637,11 @@ def write_file_preamble(
     handle.write(f"# dataset_stem={DATASET_STEM}\n")
     handle.write(f"# reference_temperature_k={reference_temperature_k:g}\n")
     handle.write("# pure_nu3_filter=lower and upper states satisfy n1=n2=n4=0\n")
-    handle.write(
-        f"# band_label={exomol_signature_label(lower_signature)} -> {exomol_signature_label(upper_signature)}\n"
-    )
-    handle.write(
-        f"# hitran_style_band_label={hitran_style_signature_label(lower_signature)} -> "
-        f"{hitran_style_signature_label(upper_signature)}\n"
-    )
+    handle.write(f"# band_label={band_label}\n")
+    handle.write(f"# hitran_style_band_label={band_label_hitran_style}\n")
     if wn_min is not None and wn_max is not None:
         handle.write(f"# wavenumber_window_cm-1={wn_min:g} to {wn_max:g}\n")
-    handle.write(
-        "upper_id\tlower_id\tupper_energy_cm-1\tlower_energy_cm-1\twavenumber_cm-1\t"
-        "einstein_A_s-1\tline_intensity_cm_per_molecule\n"
-    )
+    handle.write(f"{DATA_HEADER}\n")
 
 
 def write_summary_csv(output_dir: Path, rows: list[dict[str, object]]) -> Path:
@@ -484,7 +697,7 @@ def main() -> None:
     )
 
     print("loading states")
-    energies, g_totals, signature_ids, signature_lookup = load_state_arrays(
+    energies, g_totals, signature_ids, signature_lookup, local_label_ids, local_labels = load_state_arrays(
         states_path,
         int(def_metadata["nstates"]),
         column_indices,
@@ -494,8 +707,8 @@ def main() -> None:
     transition_files = transition_files_for_args(args)
     print(f"scanning {len(transition_files)} transition files")
 
-    output_handles: OrderedDict[tuple[int, int], TextIO] = OrderedDict()
-    band_rows: dict[tuple[int, int], dict[str, object]] = {}
+    output_handles: OrderedDict[tuple[object, object], TextIO] = OrderedDict()
+    band_rows: dict[tuple[object, object], dict[str, object]] = {}
     stats = defaultdict(int)
     stats["files"] = len(transition_files)
 
@@ -545,23 +758,31 @@ def main() -> None:
                 if intensity < args.intensity_threshold:
                     continue
 
-                key = (lower_signature_id, upper_signature_id)
+                band_label, band_label_hitran_style = band_label_pair(lower_signature, upper_signature, args.group_by)
+                if args.group_by == "hitran-style":
+                    key = (band_label, band_label_hitran_style)
+                else:
+                    key = (lower_signature_id, upper_signature_id)
                 handle = output_handles.get(key)
                 if handle is None:
                     is_new_band = key not in band_rows
                     if is_new_band:
-                        out_path = output_path_for_band(
-                            args.output_dir,
-                            lower_signature,
-                            upper_signature,
-                            args.reference_temperature_k,
-                        )
+                        if args.group_by == "hitran-style":
+                            out_path = output_path_for_hitran_style_band(
+                                args.output_dir,
+                                band_label_hitran_style,
+                                args.reference_temperature_k,
+                            )
+                        else:
+                            out_path = output_path_for_band(
+                                args.output_dir,
+                                lower_signature,
+                                upper_signature,
+                                args.reference_temperature_k,
+                            )
                         band_rows[key] = {
-                            "band_label": f"{exomol_signature_label(lower_signature)} -> {exomol_signature_label(upper_signature)}",
-                            "band_label_hitran_style": (
-                                f"{hitran_style_signature_label(lower_signature)} -> "
-                                f"{hitran_style_signature_label(upper_signature)}"
-                            ),
+                            "band_label": band_label,
+                            "band_label_hitran_style": band_label_hitran_style,
                             "mode_pair": f"nu3 {lower_signature.n3}->{upper_signature.n3}",
                             "line_count": 0,
                             "reference_temperature_k": args.reference_temperature_k,
@@ -584,8 +805,8 @@ def main() -> None:
                     if is_new_band:
                         write_file_preamble(
                             handle,
-                            lower_signature=lower_signature,
-                            upper_signature=upper_signature,
+                            band_label=str(band_rows[key]["band_label"]),
+                            band_label_hitran_style=str(band_rows[key]["band_label_hitran_style"]),
                             reference_temperature_k=args.reference_temperature_k,
                             wn_min=args.wn_min,
                             wn_max=args.wn_max,
@@ -596,7 +817,8 @@ def main() -> None:
 
                 handle.write(
                     f"{upper_id}\t{lower_id}\t{float(energies[upper_id]):.10f}\t{float(energies[lower_id]):.10f}\t"
-                    f"{wavenumber:.10f}\t{a_value:.10e}\t{intensity:.10e}\n"
+                    f"{wavenumber:.10f}\t{a_value:.10e}\t{intensity:.10e}\t"
+                    f"{local_labels[int(local_label_ids[upper_id])]}\t{local_labels[int(local_label_ids[lower_id])]}\n"
                 )
                 band_rows[key]["line_count"] = int(band_rows[key]["line_count"]) + 1
                 stats["kept"] += 1

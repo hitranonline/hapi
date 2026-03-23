@@ -11,7 +11,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from plot_exomol_ch4_mm_absorbance import ROOT_DIR
+ROOT_DIR = Path(__file__).resolve().parent
 
 
 DEFAULT_INPUT_DIR = ROOT_DIR / "exomol_ch4_mm_pure_nu3_band_texts_hitran_style"
