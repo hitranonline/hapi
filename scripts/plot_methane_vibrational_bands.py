@@ -2,6 +2,11 @@ import csv
 import os
 import re
 from collections import defaultdict
+from pathlib import Path
+
+from _bootstrap import ensure_repo_root
+
+ensure_repo_root()
 
 import hapi
 import numpy as np
@@ -10,8 +15,9 @@ import plotly.graph_objects as go
 # -------------------------
 # USER SETTINGS
 # -------------------------
-DB_DIR = "hitran_db"
-OUTPUT_DIR = "methane_vibrational_bands"
+ROOT_DIR = Path(__file__).resolve().parents[1]
+DB_DIR = str(ROOT_DIR / "hitran_db")
+OUTPUT_DIR = str(ROOT_DIR / "methane_vibrational_bands")
 
 SOURCE_TABLE = "CH4_M6_I1"
 

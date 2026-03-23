@@ -1,15 +1,21 @@
 import csv
 import os
 import re
+from pathlib import Path
 from typing import Any
+
+from _bootstrap import ensure_repo_root
+
+ensure_repo_root()
 
 import hapi
 
 # -------------------------
 # USER SETTINGS
 # -------------------------
-DB_DIR = "hitran_db"
-OUTPUT_DIR = "co_hot_bands"
+ROOT_DIR = Path(__file__).resolve().parents[1]
+DB_DIR = str(ROOT_DIR / "hitran_db")
+OUTPUT_DIR = str(ROOT_DIR / "co_hot_bands")
 
 MOLECULE_ID = 5
 ISOTOPOLOGUE_ID = 1

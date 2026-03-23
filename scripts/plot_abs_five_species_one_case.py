@@ -1,15 +1,22 @@
 import csv
 import os
 import re
+from pathlib import Path
 import numpy as np
+
+from _bootstrap import ensure_repo_root
+
+ensure_repo_root()
+
 import hapi
 import plotly.graph_objects as go
 
 # -------------------------
 # USER SETTINGS
 # -------------------------
-DB_DIR = "hitran_db"
-OUTPUT_DIR = "5_species"
+ROOT_DIR = Path(__file__).resolve().parents[1]
+DB_DIR = str(ROOT_DIR / "hitran_db")
+OUTPUT_DIR = str(ROOT_DIR / "5_species")
 
 WN_MIN = 2500.0
 WN_MAX = 3500.0

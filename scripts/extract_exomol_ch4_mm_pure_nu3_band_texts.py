@@ -69,7 +69,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TextIO
 
-ROOT_DIR = Path(__file__).resolve().parent
+ROOT_DIR = Path(__file__).resolve().parents[1]
 DATA_DIR = ROOT_DIR / "exomol_db" / "CH4" / "12C-1H4" / "MM"
 DATASET_STEM = "12C-1H4__MM"
 SECOND_RADIATION_CONSTANT_CM_K = 1.438776877

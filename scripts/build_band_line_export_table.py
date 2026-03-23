@@ -48,11 +48,15 @@ import os
 import re
 from pathlib import Path
 
+from _bootstrap import ensure_repo_root
+
+ensure_repo_root()
+
 import hapi
 import render_band_line_text_curves as rendered_curves
 
 
-ROOT_DIR = Path(__file__).resolve().parent
+ROOT_DIR = Path(__file__).resolve().parents[1]
 
 HITRAN_TXT_DIR = rendered_curves.TXT_DIR
 HITRAN_CURVE_DIR = rendered_curves.OUTPUT_DIR

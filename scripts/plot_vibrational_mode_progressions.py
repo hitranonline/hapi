@@ -6,7 +6,7 @@ How to use this script
 3. Only use `SOURCE_TABLE_OVERRIDE` if you want a non-default table.
 4. Adjust the spectral range and gas conditions below.
 5. Run:
-       python plot_vibrational_mode_progressions.py
+       python scripts/plot_vibrational_mode_progressions.py
 
 Outputs
 -------
@@ -37,6 +37,11 @@ import csv
 import os
 import re
 from collections import defaultdict
+from pathlib import Path
+
+from _bootstrap import ensure_repo_root
+
+ensure_repo_root()
 
 import hapi
 import numpy as np
@@ -45,7 +50,8 @@ import plotly.graph_objects as go
 # -------------------------
 # USER SETTINGS
 # -------------------------
-DB_DIR = "hitran_db"
+ROOT_DIR = Path(__file__).resolve().parents[1]
+DB_DIR = str(ROOT_DIR / "hitran_db")
 
 SPECIES_KEY = "CO"
 SOURCE_TABLE_OVERRIDE = ""
@@ -144,7 +150,7 @@ PARSE_QUANTA = SPECIES_CONFIG["parse_quanta"]
 
 SOURCE_TABLE = SOURCE_TABLE_OVERRIDE.strip() or SPECIES_CONFIG["default_table"]
 
-OUTPUT_DIR = f"{DISPLAY_NAME.lower()}_{MODE_LABEL}_progressions"
+OUTPUT_DIR = str(ROOT_DIR / f"{DISPLAY_NAME.lower()}_{MODE_LABEL}_progressions")
 CATEGORY_OUTPUT_DIR = os.path.join(OUTPUT_DIR, "categories")
 
 

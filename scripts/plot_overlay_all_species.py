@@ -1,6 +1,11 @@
 import glob
 import os
 import re
+from pathlib import Path
+
+from _bootstrap import ensure_repo_root
+
+ensure_repo_root()
 
 import hapi
 
@@ -12,13 +17,14 @@ except ImportError as exc:
 # -------------------------
 # USER SETTINGS
 # -------------------------
-DB_DIR = "hitran_db"
+ROOT_DIR = Path(__file__).resolve().parents[1]
+DB_DIR = str(ROOT_DIR / "hitran_db")
 WN_MIN = 2500.0
 WN_MAX = 3500.0
 WN_STEP = 0.05  # overlaying many species is faster with coarser step
 TEMPERATURE_K = 296.0
 PRESSURE_ATM = 1.0
-OUTPUT_PNG = "all_species_overlay_2500_3500.png"
+OUTPUT_PNG = str(ROOT_DIR / "all_species_overlay_2500_3500.png")
 
 # -------------------------
 # 1) Open local HAPI database

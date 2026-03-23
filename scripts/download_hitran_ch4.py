@@ -1,5 +1,11 @@
 import re
+from pathlib import Path
 import pandas as pd
+
+from _bootstrap import ensure_repo_root
+
+ensure_repo_root()
+
 import hapi  # classic HAPI module
 
 # -------------------------
@@ -8,7 +14,8 @@ import hapi  # classic HAPI module
 # For this classic hapi package, fetch() does not consume an API key directly.
 # Keep this variable only for your own reference if needed.
 API_KEY = "86677861-553f-4190-b391-950f9a40c94c"
-DB_DIR = "hitran_db"
+ROOT_DIR = Path(__file__).resolve().parents[1]
+DB_DIR = str(ROOT_DIR / "hitran_db")
 NU_MIN = 0.0      # cm^-1 Lower wavenumber bound (cm^-1).
 NU_MAX = 10000.0  # cm^-1 Upper wavenumber bound (cm^-1).
 I = 1             # main isotopologue

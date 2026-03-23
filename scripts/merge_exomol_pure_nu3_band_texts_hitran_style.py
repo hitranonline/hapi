@@ -27,7 +27,7 @@ import re
 from collections import defaultdict
 from pathlib import Path
 
-ROOT_DIR = Path(__file__).resolve().parent
+ROOT_DIR = Path(__file__).resolve().parents[1]
 
 
 DEFAULT_INPUT_DIR = ROOT_DIR / "exomol_ch4_mm_pure_nu3_band_texts"

@@ -4,7 +4,7 @@ Usage
 -----
 Run the script with one ExoMol band text file:
 
-    python report_and_plot_band_intensity_compare.py ^
+    python scripts/report_and_plot_band_intensity_compare.py ^
         --exomol-txt exomol_ch4_mm_pure_nu3_band_texts_hitran_style_2500_3500_sorted\\
 EXOMOL_CH4_MM_pure_nu3_hitran_style_0_0_0_0_1F2_to_0_0_1_0_1F1_T296.0K.txt
 
@@ -26,8 +26,10 @@ By default outputs are written to `band_intensity_comparisons/`.
 
 The script now writes two HTML plots:
 - one for the selected band comparison
-- one aggregate figure combining all available `nu3 0->1` bands from both
+- one residual plot for the selected band comparison
+- one aggregate overlay combining all available `nu3 0->1` bands from both
   ExoMol and HITRAN inputs
+- one aggregate residual plot for that `nu3 0->1` comparison
 """
 
 from __future__ import annotations
@@ -39,7 +41,9 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-ROOT_DIR = Path(__file__).resolve().parent
+import numpy as np
+
+ROOT_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_HITRAN_DIR = ROOT_DIR / "ch4_nu3_progressions" / "band_line_texts"
 DEFAULT_HITRAN_HEADER = ROOT_DIR / "hitran_db" / "CH4_M6_I1.header"
 DEFAULT_OUTPUT_DIR = ROOT_DIR / "band_intensity_comparisons"
@@ -390,6 +394,7 @@ def write_report(
 - Strongest-line wavenumber difference: {strongest_wavenumber_delta:.6f} cm^-1
 - Strongest-line intensity ratio ExoMol/HITRAN: {strongest_intensity_ratio:.6f}
 - Plot file: `{path.with_name(path.stem.replace("_comparison_report", "_intensity_overlay") + ".html")}`
+- Residual plot file: `{path.with_name(path.stem.replace("_comparison_report", "_intensity_residual") + ".html")}`
 
 ## Aggregate `nu3 0->1` Comparison
 
@@ -412,6 +417,7 @@ def write_report(
 - Strongest-line wavenumber difference: {aggregate_strongest_wavenumber_delta:.6f} cm^-1
 - Strongest-line intensity ratio ExoMol/HITRAN: {aggregate_strongest_intensity_ratio:.6f}
 - Plot file: `{path.with_name("nu3_0_to_1_intensity_overlay.html")}`
+- Residual plot file: `{path.with_name("nu3_0_to_1_intensity_residual.html")}`
 
 ## Assessment
 
@@ -509,6 +515,109 @@ def write_plot(
     path.write_text(html_text, encoding="utf-8")
 
 
+def residual_series(
+    exomol_x: list[float],
+    exomol_y: list[float],
+    hitran_x: list[float],
+    hitran_y: list[float],
+) -> tuple[list[float], list[float]]:
+    grid = np.array(sorted(set(exomol_x) | set(hitran_x)), dtype=float)
+    exomol_interp = np.interp(grid, np.array(exomol_x, dtype=float), np.array(exomol_y, dtype=float), left=0.0, right=0.0)
+    hitran_interp = np.interp(grid, np.array(hitran_x, dtype=float), np.array(hitran_y, dtype=float), left=0.0, right=0.0)
+    residual = exomol_interp - hitran_interp
+    return grid.tolist(), residual.tolist()
+
+
+def write_residual_plot(
+    path: Path,
+    *,
+    exomol_label: BandLabel,
+    hitran_label: BandLabel,
+    status: str,
+    exomol_x: list[float],
+    exomol_y: list[float],
+    hitran_x: list[float],
+    hitran_y: list[float],
+) -> None:
+    residual_x, residual_y = residual_series(exomol_x, exomol_y, hitran_x, hitran_y)
+    x_min = min(residual_x)
+    x_max = max(residual_x)
+    title = (
+        "Band Intensity Residual"
+        "<br>Residual = ExoMol - HITRAN"
+        "<br>Requested: "
+        f"{exomol_label.lower} -> {exomol_label.upper}"
+        "<br>Chosen HITRAN: "
+        f"{hitran_label.lower} -> {hitran_label.upper}"
+        "<br>Status: "
+        f"{status}"
+    )
+
+    html_text = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Band Intensity Residual</title>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <style>
+    body {{
+      margin: 0;
+      font-family: Segoe UI, Arial, sans-serif;
+      background: #ffffff;
+      color: #111111;
+    }}
+    #plot {{
+      width: 100%;
+      height: 720px;
+    }}
+  </style>
+</head>
+<body>
+  <div id="plot"></div>
+  <script>
+    const data = [
+      {{
+        x: {json.dumps(residual_x)},
+        y: {json.dumps(residual_y)},
+        mode: "lines",
+        name: "ExoMol - HITRAN",
+        line: {{ color: "#2ca02c", width: 1.5 }}
+      }},
+      {{
+        x: [{x_min}, {x_max}],
+        y: [0, 0],
+        mode: "lines",
+        name: "Zero",
+        line: {{ color: "#444444", width: 1, dash: "dash" }}
+      }}
+    ];
+
+    const layout = {{
+      title: {json.dumps(title)},
+      template: "plotly_white",
+      xaxis: {{
+        title: "Wavenumber (cm^-1)",
+        range: [{x_min}, {x_max}]
+      }},
+      yaxis: {{
+        title: "Residual Intensity"
+      }},
+      margin: {{
+        l: 80,
+        r: 30,
+        t: 110,
+        b: 70
+      }}
+    }};
+
+    Plotly.newPlot("plot", data, layout, {{ responsive: true }});
+  </script>
+</body>
+</html>
+"""
+    path.write_text(html_text, encoding="utf-8")
+
+
 def output_stem(exomol_label: BandLabel) -> str:
     label_text = f"{exomol_label.lower}_to_{exomol_label.upper}"
     return safe_label_fragment(label_text)
@@ -549,7 +658,9 @@ def main() -> None:
     stem = output_stem(exomol_label)
     report_path = args.out_dir / f"{stem}_comparison_report.md"
     plot_path = args.out_dir / f"{stem}_intensity_overlay.html"
+    residual_plot_path = args.out_dir / f"{stem}_intensity_residual.html"
     aggregate_plot_path = args.out_dir / "nu3_0_to_1_intensity_overlay.html"
+    aggregate_residual_plot_path = args.out_dir / "nu3_0_to_1_intensity_residual.html"
 
     write_report(
         report_path,
@@ -573,8 +684,28 @@ def main() -> None:
         hitran_x=hitran_x,
         hitran_y=hitran_y,
     )
+    write_residual_plot(
+        residual_plot_path,
+        exomol_label=exomol_label,
+        hitran_label=chosen_hitran.label,
+        status=status,
+        exomol_x=exomol_x,
+        exomol_y=exomol_y,
+        hitran_x=hitran_x,
+        hitran_y=hitran_y,
+    )
     write_plot(
         aggregate_plot_path,
+        exomol_label=build_band_label("0 0 0 0 agg", "0 0 1 0 agg"),
+        hitran_label=build_band_label("0 0 0 0 agg", "0 0 1 0 agg"),
+        status="aggregate_nu3_0_to_1",
+        exomol_x=exomol_aggregate_x,
+        exomol_y=exomol_aggregate_y,
+        hitran_x=hitran_aggregate_x,
+        hitran_y=hitran_aggregate_y,
+    )
+    write_residual_plot(
+        aggregate_residual_plot_path,
         exomol_label=build_band_label("0 0 0 0 agg", "0 0 1 0 agg"),
         hitran_label=build_band_label("0 0 0 0 agg", "0 0 1 0 agg"),
         status="aggregate_nu3_0_to_1",
@@ -587,7 +718,9 @@ def main() -> None:
     print(f"status: {status}")
     print(f"report: {report_path}")
     print(f"plot: {plot_path}")
+    print(f"residual_plot: {residual_plot_path}")
     print(f"aggregate_plot: {aggregate_plot_path}")
+    print(f"aggregate_residual_plot: {aggregate_residual_plot_path}")
 
 
 if __name__ == "__main__":

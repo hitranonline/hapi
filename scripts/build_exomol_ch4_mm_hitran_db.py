@@ -44,7 +44,7 @@ from typing import Iterator
 import numpy as np
 
 
-ROOT_DIR = Path(__file__).resolve().parent
+ROOT_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_DATA_DIR = ROOT_DIR / "exomol_db" / "CH4" / "12C-1H4" / "MM"
 DEFAULT_OUTPUT_DIR = ROOT_DIR / "hitran_db"
 DEFAULT_TABLE_NAME = "CH4_EXOMOL_MM_I1"

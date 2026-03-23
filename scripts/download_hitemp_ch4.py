@@ -20,7 +20,7 @@ Credential handling
 You can provide HITRAN web-login credentials in either of these ways:
 
 - command line:
-  `python download_hitemp_ch4.py --email you@example.com`
+  `python scripts/download_hitemp_ch4.py --email you@example.com`
   and you will be prompted for the password
 - environment variables:
   `HITRAN_EMAIL` and `HITRAN_PASSWORD`
@@ -32,18 +32,18 @@ either of these ways:
 
 - edit `DEFAULT_HITRAN_API_KEY` below
 - environment variable: `HITRAN_API_KEY`
-- command line: `python download_hitemp_ch4.py --api-key YOUR_KEY`
+- command line: `python scripts/download_hitemp_ch4.py --api-key YOUR_KEY`
 
 Examples
 --------
 - Download the compressed archive only:
-  `python download_hitemp_ch4.py --email you@example.com`
+  `python scripts/download_hitemp_ch4.py --email you@example.com`
 
 - Download and extract the full `.par` file:
-  `python download_hitemp_ch4.py --email you@example.com --extract-par`
+  `python scripts/download_hitemp_ch4.py --email you@example.com --extract-par`
 
 - Download and extract only 2500-3500 cm^-1:
-  `python download_hitemp_ch4.py --email you@example.com --extract-par --numin 2500 --numax 3500`
+  `python scripts/download_hitemp_ch4.py --email you@example.com --extract-par --numin 2500 --numax 3500`
 """
 
 from __future__ import annotations
@@ -68,10 +68,10 @@ from urllib.parse import urlencode, urljoin, urlparse
 from urllib.request import HTTPCookieProcessor, Request, build_opener
 
 
-ROOT_DIR = Path(__file__).resolve().parent
+ROOT_DIR = Path(__file__).resolve().parents[1]
 LOGIN_URL = "https://hitran.org/login/"
 DOWNLOAD_URL = "https://hitran.org/files/HITEMP/bzip2format/06_HITEMP2020.par.bz2"
-DEFAULT_OUTPUT_DIR = Path("hitemp_db") / "CH4"
+DEFAULT_OUTPUT_DIR = ROOT_DIR / "hitemp_db" / "CH4"
 HEADER_TEMPLATE_PATH = ROOT_DIR / "hitran_db" / "CH4_M6_I1.header"
 DEFAULT_USER_AGENT = "hapi-hitemp-ch4-downloader/1.0"
 DEFAULT_TIMEOUT_SECONDS = 60.0

@@ -1,5 +1,6 @@
 *.pyc
 *.bak
+__pycache__/
 build/
 dist/
 hitran_api.egg-info/
@@ -25,3 +26,8 @@ exomol_ch4_mm_pure_nu3_band_texts_hitran_style_2500_3500_sorted/
 _smoke_exomol_ch4_mm_pure_nu3_band_texts*/
 exomol_ch4_mm_pure_nu3_band_texts*.zip
 classify/
+band_intensity_comparisons/
+co_hot_bands/
+exomol_ch4_mm_band_exports/
+exomol_i1_smoke_band_texts/
+exomol_test_band_texts/

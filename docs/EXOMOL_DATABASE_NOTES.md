@@ -2,7 +2,9 @@
 
 This note combines the ExoMol database overview and the ExoMol spectrum-modeling explanation for this repo.
 
-It focuses on the local CH4 MM workflow implemented in [plot_exomol_ch4_mm_absorbance.py](/f:/GitHub/hapi/plot_exomol_ch4_mm_absorbance.py), with related usage in [scan_exomol_ch4_nu3_band_types.py](/f:/GitHub/hapi/scan_exomol_ch4_nu3_band_types.py) and the ExoMol-to-HITRAN-style exporter [build_exomol_ch4_mm_hitran_db.py](/f:/GitHub/hapi/build_exomol_ch4_mm_hitran_db.py).
+It focuses on the local CH4 MM workflow implemented in [scripts/plot_exomol_ch4_mm_absorbance.py](../scripts/plot_exomol_ch4_mm_absorbance.py), with related usage in [scripts/scan_exomol_ch4_nu3_band_types.py](../scripts/scan_exomol_ch4_nu3_band_types.py) and the ExoMol-to-HITRAN-style exporter [scripts/build_exomol_ch4_mm_hitran_db.py](../scripts/build_exomol_ch4_mm_hitran_db.py).
+
+Note: this note predates the `scripts/` reorganization, so some inline file links further down may still reflect the old root-level locations.
 
 ## Big Picture
 

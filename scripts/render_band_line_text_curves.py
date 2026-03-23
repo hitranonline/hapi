@@ -13,11 +13,15 @@ import argparse
 import re
 from pathlib import Path
 
+from _bootstrap import ensure_repo_root
+
+ensure_repo_root()
+
 import hapi
 import plot_vibrational_mode_progressions as progression_plot
 
 
-ROOT_DIR = Path(__file__).resolve().parent
+ROOT_DIR = Path(__file__).resolve().parents[1]
 DB_DIR = ROOT_DIR / "hitran_db"
 SOURCE_TABLE = "CH4_M6_I1"
 TXT_DIR = ROOT_DIR / "ch4_nu3_progressions" / "band_line_texts"

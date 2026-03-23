@@ -1,6 +1,8 @@
 # HITRAN Database Notes
 
-This note explains how the HITRAN database is organized and how it is used in this repo, especially in [plot_vibrational_mode_progressions.py](/f:/GitHub/hapi/plot_vibrational_mode_progressions.py), [extract_ch4_nu3_band_texts.py](/f:/GitHub/hapi/extract_ch4_nu3_band_texts.py), and the local HAPI implementation in [hapi.py](/f:/GitHub/hapi/hapi/hapi.py).
+This note explains how the HITRAN database is organized and how it is used in this repo, especially in [scripts/plot_vibrational_mode_progressions.py](../scripts/plot_vibrational_mode_progressions.py), [scripts/extract_ch4_nu3_band_texts.py](../scripts/extract_ch4_nu3_band_texts.py), and the local HAPI implementation in [hapi/hapi.py](../hapi/hapi.py).
+
+Note: this note predates the `scripts/` reorganization, so some inline file links further down may still reflect the old root-level locations.
 
 ## Big Picture
 

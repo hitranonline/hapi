@@ -22,7 +22,7 @@ import re
 from pathlib import Path
 
 
-ROOT_DIR = Path(__file__).resolve().parent
+ROOT_DIR = Path(__file__).resolve().parents[1]
 INPUT_DIR = ROOT_DIR / "ch4_nu3_progressions" / "hitemp_band_line_texts"
 OUTPUT_DIR = ROOT_DIR / "ch4_nu3_progressions" / "hitemp_band_line_texts_sorted_by_intensity"
 HEADER_PATH = ROOT_DIR / "hitemp_db" / "CH4" / "06_HITEMP2020.par_2500-3500.header"

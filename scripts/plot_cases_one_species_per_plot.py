@@ -1,7 +1,12 @@
 import glob
 import os
 import re
+from pathlib import Path
 import numpy as np
+
+from _bootstrap import ensure_repo_root
+
+ensure_repo_root()
 
 import hapi
 import plotly.graph_objects as go
@@ -14,17 +19,18 @@ except ImportError as exc:
 # -------------------------
 # USER SETTINGS
 # -------------------------
-DB_DIR = "hitran_db"
+ROOT_DIR = Path(__file__).resolve().parents[1]
+DB_DIR = str(ROOT_DIR / "hitran_db")
 WN_MIN = 2500.0
 WN_MAX = 3500.0
 WN_STEP = 0.01
 
 PATH_LENGTH_CM = 100.0 # 100 cm
 
-OUTPUT_DIR = "species_plots_2500_3500_test"
+OUTPUT_DIR = str(ROOT_DIR / "species_plots_2500_3500_test")
 SELECT_SPECIES = ["CH3", "CH4"]  # e.g. ["CH3"] or ["CH3_M57_I1", "C2H2"]
 CSV_OVERLAY_FILES = [
-    "[0]CH4,HITRAN_ X = 0.0001, T = 300 K, P = 0.13157894736842105 atm, L = 100 cm .csv"
+    str(ROOT_DIR / "[0]CH4,HITRAN_ X = 0.0001, T = 300 K, P = 0.13157894736842105 atm, L = 100 cm .csv")
 ]
 
 X = 1e-4 # 100 ppm, x = 1e-4

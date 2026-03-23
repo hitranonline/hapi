@@ -38,7 +38,7 @@ from pathlib import Path
 import numpy as np
 
 
-ROOT_DIR = Path(__file__).resolve().parent
+ROOT_DIR = Path(__file__).resolve().parents[1]
 DATA_DIR = ROOT_DIR / "exomol_db" / "CH4" / "12C-1H4" / "MM"
 OUTPUT_DIR = ROOT_DIR / "exomol_ch4_mm_scans"
 DATASET_STEM = "12C-1H4__MM"
