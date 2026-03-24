@@ -10,6 +10,7 @@ The recent cleanup starts separating those concerns so the repo is easier to rea
 ## Current layout
 
 - `hapi/`: the library/package code
+- `research/`: the new repo-specific research workflow package
 - `scripts/`: standalone workflow utilities and analysis entry points
 - `docs/`: repository notes and structure documentation
 - `hitran_db/`: local HITRAN-style tables used by HAPI and the analysis scripts
@@ -19,12 +20,14 @@ The recent cleanup starts separating those concerns so the repo is easier to rea
 ## Where to start
 
 - Read [docs/REPOSITORY_STRUCTURE.md](docs/REPOSITORY_STRUCTURE.md) for the top-level map.
+- Read [docs/framework.md](docs/framework.md) for the planned Python package direction.
 - Read [scripts/README.md](scripts/README.md) for the script inventory and workflow entry points.
 - Read [docs/HITRAN_DATABASE_NOTES.md](docs/HITRAN_DATABASE_NOTES.md) or [docs/EXOMOL_DATABASE_NOTES.md](docs/EXOMOL_DATABASE_NOTES.md) for the spectroscopy-specific background.
 
 ## Working convention going forward
 
-- Put reusable library code in `hapi/`.
+- Put low-level spectroscopy code in `hapi/`.
+- Put repo-specific research workflows in `research/`.
 - Put runnable utilities in `scripts/`.
 - Put explanatory Markdown in `docs/`.
 - Treat generated outputs as artifacts, not as primary source code.

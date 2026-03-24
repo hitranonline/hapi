@@ -1,0 +1,2 @@
+progression_label,line_count,grid_point_count,max_abs_difference,mean_abs_difference,max_relative_difference,mean_relative_difference,legacy_peak_absorbance,module_peak_absorbance,legacy_peak_wavenumber_cm-1,module_peak_wavenumber_cm-1,peak_wavenumber_delta_cm-1
+nu3 0->1,55558,4001,0.000000000000e+00,0.000000000000e+00,0.000000000000e+00,0.000000000000e+00,7.494702898863e-01,7.494702898863e-01,3016.500000,3016.500000,0.000000e+00

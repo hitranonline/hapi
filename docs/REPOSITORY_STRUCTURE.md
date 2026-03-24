@@ -6,6 +6,8 @@ This document explains what lives where after the first cleanup pass on the `cod
 
 - `hapi/`
   The importable HAPI package code.
+- `research/`
+  The new importable research workflow package built on top of HAPI.
 - `scripts/`
   Standalone Python entry points for downloading data, extracting bands, building derived tables, plotting, and generating reports.
 - `setup.py`
@@ -15,6 +17,8 @@ This document explains what lives where after the first cleanup pass on the `cod
 
 - `README.md`
   High-level repository guide.
+- `docs/framework.md`
+  Design spec for the future research workflow package.
 - `docs/HITRAN_DATABASE_NOTES.md`
   Detailed notes about the local HITRAN/HAPI workflow.
 - `docs/EXOMOL_DATABASE_NOTES.md`
@@ -51,7 +55,8 @@ These directories are mostly outputs, intermediates, or workflow-specific export
 
 ## Conventions for future cleanup
 
-- New reusable code should go into `hapi/` or a dedicated package module.
+- New low-level spectroscopy code should go into `hapi/`.
+- New repo-specific workflow code should go into `research/`.
 - New one-shot or CLI-style tooling should go into `scripts/`.
 - New documentation should go into `docs/`.
 - New generated outputs should stay in workflow-specific artifact folders and be ignored in `.gitignore` when they are reproducible.
