@@ -88,3 +88,44 @@ def save_spectrum_html(
     fig.update_xaxes(range=[float(wavenumber[0]), float(wavenumber[-1])])
     fig.write_html(path, include_plotlyjs="cdn")
     return path
+
+
+def compute_panel_y_limits(
+    traces: list[dict[str, object]],
+    *,
+    y_key: str,
+    label_items: list[dict[str, object]] | None = None,
+    lower_pad_fraction: float = 0.05,
+    upper_pad_fraction: float = 0.08,
+    fallback: tuple[float, float] = (0.0, 1.0),
+) -> tuple[float, float]:
+    y_values: list[float] = []
+    for trace in traces:
+        series = np.asarray(trace[y_key], dtype=float)
+        if series.size == 0:
+            continue
+        y_values.append(float(np.min(series)))
+        y_values.append(float(np.max(series)))
+
+    for item in label_items or []:
+        if "peak_y" in item:
+            y_values.append(float(item["peak_y"]))
+        if "label_y" in item:
+            y_values.append(float(item["label_y"]))
+
+    if not y_values:
+        return fallback
+
+    raw_min = min(y_values)
+    raw_max = max(y_values)
+    if math.isclose(raw_min, raw_max):
+        center = raw_min
+        span = max(abs(center) * 0.1, 1.0e-6)
+        return center - span, center + span
+
+    span = raw_max - raw_min
+    y_min = raw_min - lower_pad_fraction * span
+    y_max = raw_max + upper_pad_fraction * span
+    if math.isclose(y_min, y_max):
+        y_max = y_min + max(abs(y_min) * 0.1, 1.0e-6)
+    return y_min, y_max

@@ -5,6 +5,11 @@ This is a thin wrapper around `research.exomol.plot_sorted_nu3_absorbance_progre
 It also runs the module validation step for `nu3 0->1` before building the
 per-progression absorbance figures and final report.
 
+Each progression figure is split into 3 stacked branch panels:
+- `delta J = -1`
+- `delta J = 0`
+- `delta J = +1`
+
 Notes
 -----
 - The sorted ExoMol exports in this workflow carry `T296.0K` line intensities.
@@ -16,6 +21,7 @@ Notes
 from __future__ import annotations
 
 import argparse
+import re
 from pathlib import Path
 
 from _bootstrap import ensure_repo_root
@@ -24,6 +30,16 @@ from _bootstrap import ensure_repo_root
 ROOT_DIR = ensure_repo_root()
 
 from research.exomol import plot_sorted_nu3_absorbance_progressions, sorted_nu3_band_dir
+
+
+J_PAIR_PATTERN = re.compile(r"^\s*(\d+)\s*->\s*(\d+)\s*$")
+
+
+def parse_j_pair(text: str) -> tuple[int, int]:
+    match = J_PAIR_PATTERN.fullmatch(text)
+    if match is None:
+        raise argparse.ArgumentTypeError("J pair must look like '2->3'")
+    return int(match.group(1)), int(match.group(2))
 
 
 def parse_args() -> argparse.Namespace:
@@ -61,10 +77,24 @@ def parse_args() -> argparse.Namespace:
         help="Discard exported lines weaker than this value in cm/molecule before rendering.",
     )
     parser.add_argument(
-        "--label-top-n",
+        "--label-top-n-per-delta-j",
+        dest="label_top_n_per_delta_j",
         type=int,
         default=8,
-        help="Number of strongest J-pair curves to label directly on each figure.",
+        help="Number of strongest J-pair curves to label inside each ΔJ panel.",
+    )
+    parser.add_argument(
+        "--label-top-n",
+        dest="label_top_n_per_delta_j",
+        type=int,
+        help=argparse.SUPPRESS,
+    )
+    parser.add_argument(
+        "--forced-j-pairs",
+        type=parse_j_pair,
+        nargs="*",
+        default=None,
+        help="Extra J pairs to force onto the figures, for example: 2->3 3->4 6->7.",
     )
     parser.add_argument(
         "--html-max-points",
@@ -88,8 +118,9 @@ def main() -> int:
         path_length_cm=args.path_length_cm,
         line_cutoff=args.line_cutoff,
         min_line_intensity=args.min_line_intensity,
-        label_top_n=args.label_top_n,
+        label_top_n_per_delta_j=args.label_top_n_per_delta_j,
         html_max_points=args.html_max_points,
+        forced_j_pairs=None if args.forced_j_pairs is None else tuple(args.forced_j_pairs),
     )
 
     print(f"progressions written: {result.metadata['progression_count']}")

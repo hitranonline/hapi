@@ -1,0 +1,2 @@
+progression_label,lower_mode,upper_mode,hitran_selected_jpair_count,exomol_selected_jpair_count,jpair_count,grid_point_count,delta_j_minus_1_count,delta_j_0_count,delta_j_plus_1_count,skipped_jpair_count,labeled_j_pairs,png_file,html_file,mapping_csv
+nu3 0->1,0 0 0 0,0 0 1 0,32,0,32,401,1,23,8,0,"dJ_-1: J 1->0; dJ_+0: J 5->5, J 6->6, J 14->14, J 13->13, J 3->3, J 9->9, J 8->8, J 7->7; dJ_+1: J 2->3, J 7->8, J 5->6, J 6->7, J 4->5, J 3->4, J 0->1, J 1->2",nu3_0_to_1_absorbance.png,nu3_0_to_1_absorbance.html,nu3_0_to_1_jpairs.csv
