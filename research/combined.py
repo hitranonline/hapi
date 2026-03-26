@@ -5,8 +5,8 @@ Workflow structure:
 - collect pure-nu3 progression groups from ExoMol, when enabled
 - collect pure-nu3 progression groups from HITRAN, when enabled
 - build the J-pair union for each pure-nu3 progression
-- choose one source per J pair using the ordered `source_priority`
-- render the chosen J pair with that source's native absorbance path
+- if both sources contain the same J pair, take the pointwise maximum of both modeled absorbance curves
+- if only one source contains the J pair, use that source alone
 - write one PNG, one HTML, one J-pair CSV, one summary CSV, and one report
 """
 
@@ -55,7 +55,6 @@ from .spectra import build_grid, compute_panel_y_limits, to_absorbance
 
 
 SOURCE_CHOICES = ("exomol", "hitran")
-DEFAULT_SOURCE_PRIORITY = ("hitran", "exomol")
 PURE_NU3_PROGRESSIONS = tuple(
     ((0, 0, lower_nu3, 0), (0, 0, lower_nu3 + 1, 0))
     for lower_nu3 in range(4)
@@ -74,19 +73,23 @@ def _source_label(source_name: str) -> str:
     return "ExoMol" if source_name == "exomol" else "HITRAN"
 
 
-def _normalize_source_priority(
-    normalized_sources: tuple[str, ...],
-    source_priority: tuple[str, ...],
-) -> tuple[str, ...]:
-    loaded_sources = set(normalized_sources)
-    normalized_priority: list[str] = []
-    for source_name in source_priority:
-        if source_name in loaded_sources and source_name not in normalized_priority:
-            normalized_priority.append(source_name)
-    for source_name in normalized_sources:
-        if source_name not in normalized_priority:
-            normalized_priority.append(source_name)
-    return tuple(normalized_priority)
+def _source_mode(has_exomol: bool, has_hitran: bool) -> str:
+    if has_exomol and has_hitran:
+        return "merged"
+    if has_exomol:
+        return "exomol_only"
+    if has_hitran:
+        return "hitran_only"
+    return "none"
+
+
+def _available_sources(has_exomol: bool, has_hitran: bool) -> tuple[str, ...]:
+    available: list[str] = []
+    if has_exomol:
+        available.append("exomol")
+    if has_hitran:
+        available.append("hitran")
+    return tuple(available)
 
 
 def _collect_exomol_pure_nu3_groups(
@@ -107,6 +110,36 @@ def _collect_exomol_pure_nu3_groups(
         for group in progression_groups
         if (tuple(group["lower_mode"]), tuple(group["upper_mode"])) in PURE_NU3_PROGRESSIONS
     }
+
+
+def _align_to_grid(x_values: np.ndarray, y_values: np.ndarray, grid: np.ndarray) -> np.ndarray:
+    x_array = np.asarray(x_values, dtype=np.float64)
+    y_array = np.asarray(y_values, dtype=np.float64)
+    if x_array.size == 0 or y_array.size == 0:
+        return np.zeros_like(grid, dtype=np.float64)
+    if x_array.shape == grid.shape and np.allclose(x_array, grid, rtol=0.0, atol=1.0e-12):
+        return y_array
+    return np.interp(grid, x_array, y_array, left=0.0, right=0.0)
+
+
+def _peak_source_at_index(
+    *,
+    exomol_value: float,
+    hitran_value: float,
+) -> str:
+    has_exomol = exomol_value > 0.0
+    has_hitran = hitran_value > 0.0
+    if has_exomol and not has_hitran:
+        return "exomol"
+    if has_hitran and not has_exomol:
+        return "hitran"
+    if not has_exomol and not has_hitran:
+        return "none"
+    if np.isclose(exomol_value, hitran_value, rtol=1.0e-6, atol=1.0e-18):
+        return "both"
+    if exomol_value > hitran_value:
+        return "exomol"
+    return "hitran"
 
 
 def _collect_hitran_pure_nu3_groups(
@@ -231,24 +264,26 @@ def _save_combined_progression_html(
                     name=str(trace["jpair_label"]),
                     meta=[
                         str(trace["jpair_label"]),
-                        str(trace["selected_source"]),
+                        str(trace["source_mode"]),
                         str(trace["available_sources_text"]),
-                        str(trace["fallback_used_text"]),
+                        int(trace["exomol_line_count"]),
+                        int(trace["hitran_line_count"]),
                         int(trace["line_count"]),
-                        int(trace["source_file_count"]),
+                        str(trace["peak_source"]),
                     ],
                     legendgroup=str(trace["jpair_label"]),
                     showlegend=str(trace["jpair_label"]) in labeled_keys,
                     line={"color": trace["color"], "width": 1.3},
                     hovertemplate=(
                         "J pair: %{meta[0]}<br>"
-                        "Selected source: %{meta[1]}<br>"
+                        "Source mode: %{meta[1]}<br>"
                         "Available sources: %{meta[2]}<br>"
-                        "Fallback used: %{meta[3]}<br>"
+                        "ExoMol lines: %{meta[3]}<br>"
+                        "HITRAN lines: %{meta[4]}<br>"
+                        "Total lines: %{meta[5]}<br>"
+                        "Peak source: %{meta[6]}<br>"
                         "Wavenumber: %{x:.4f} cm^-1<br>"
-                        "Absorbance: %{y:.4e}<br>"
-                        "Line count: %{meta[4]}<br>"
-                        "Source files: %{meta[5]}<extra></extra>"
+                        "Absorbance: %{y:.4e}<extra></extra>"
                     ),
                 ),
                 row=row_index,
@@ -322,10 +357,10 @@ def plot_combined_pure_nu3_absorbance_progressions(
     hitran_header_path: Path | None = None,
     source_table: str = "CH4_M6_I1",
     sources: tuple[str, ...] = SOURCE_CHOICES,
-    source_priority: tuple[str, ...] = DEFAULT_SOURCE_PRIORITY,
     wn_min: float = 2500.0,
     wn_max: float = 3500.0,
     wn_step: float = 0.25,
+    temperature_k: float = 600.0,
     pressure_torr: float = 3.0,
     mole_fraction: float = 0.008,
     path_length_cm: float = 100.0,
@@ -340,6 +375,8 @@ def plot_combined_pure_nu3_absorbance_progressions(
         raise ValueError("wn_max must be greater than wn_min")
     if wn_step <= 0.0:
         raise ValueError("wn_step must be positive")
+    if temperature_k <= 0.0:
+        raise ValueError("temperature_k must be positive")
     if line_cutoff <= 0.0:
         raise ValueError("line_cutoff must be positive")
     if label_top_n_per_delta_j < 0:
@@ -348,7 +385,6 @@ def plot_combined_pure_nu3_absorbance_progressions(
     normalized_sources = tuple(source for source in SOURCE_CHOICES if source in set(sources))
     if not normalized_sources:
         raise ValueError("At least one source must be selected from exomol/hitran")
-    normalized_source_priority = _normalize_source_priority(normalized_sources, source_priority)
 
     paths = default_paths()
     resolved_exomol_input_dir = (exomol_input_dir or sorted_nu3_band_dir()).resolve()
@@ -385,7 +421,7 @@ def plot_combined_pure_nu3_absorbance_progressions(
 
     metadata = parse_def_file(dataset_dir() / f"{DATASET_STEM}.def")
     case = GasCase(
-        temperature_k=296.0,
+        temperature_k=temperature_k,
         pressure_torr=pressure_torr,
         mole_fraction=mole_fraction,
         path_length_cm=path_length_cm,
@@ -426,33 +462,41 @@ def plot_combined_pure_nu3_absorbance_progressions(
             continue
 
         traces: list[dict[str, object]] = []
-        selected_counts = {source_name: 0 for source_name in SOURCE_CHOICES}
+        presence_counts = {
+            "shared": 0,
+            "exomol_only": 0,
+            "hitran_only": 0,
+            "exomol_contributing": 0,
+            "hitran_contributing": 0,
+        }
         for index, (lower_j, upper_j) in enumerate(sorted(available_jpairs)):
-            available_payloads: dict[str, dict[str, object]] = {}
-            selected_source: str | None = None
-            selected_payload: dict[str, object] | None = None
-            render_mode: str | None = None
+            exomol_group = None
+            hitran_group = None
+            if exomol_payload is not None:
+                exomol_group = exomol_payload["grouped_rows"].get((lower_j, upper_j))
+            if hitran_payload is not None:
+                hitran_group = hitran_payload["grouped_rows"].get((lower_j, upper_j))
 
-            if exomol_payload is not None and (lower_j, upper_j) in exomol_payload["grouped_rows"]:
-                available_payloads["exomol"] = exomol_payload["grouped_rows"][(lower_j, upper_j)]
-            if hitran_payload is not None and (lower_j, upper_j) in hitran_payload["grouped_rows"]:
-                available_payloads["hitran"] = hitran_payload["grouped_rows"][(lower_j, upper_j)]
-            available_sources = [
-                source_name for source_name in normalized_source_priority if source_name in available_payloads
-            ]
-            if available_sources:
-                selected_source = available_sources[0]
-                selected_payload = available_payloads[selected_source]
-                render_mode = selected_source
-
-            if selected_source is None or selected_payload is None or render_mode is None:
+            has_exomol = exomol_group is not None
+            has_hitran = hitran_group is not None
+            if not has_exomol and not has_hitran:
                 continue
 
-            if selected_source == "exomol":
-                selected_counts["exomol"] += 1
-                line_centers = np.asarray(selected_payload["wavenumber"], dtype=np.float64)
-                line_intensities = np.asarray(selected_payload["intensity"], dtype=np.float64)
-                absorbance = render_absorbance_on_grid(
+            available_sources = _available_sources(has_exomol, has_hitran)
+            available_sources_text = ", ".join(_source_label(source_name) for source_name in available_sources)
+            source_mode = _source_mode(has_exomol, has_hitran)
+
+            exomol_absorbance = np.zeros_like(grid, dtype=np.float64)
+            hitran_absorbance = np.zeros_like(grid, dtype=np.float64)
+            exomol_line_count = 0
+            hitran_line_count = 0
+            exomol_source_file_count = 0
+            hitran_source_file_count = 0
+
+            if has_exomol:
+                line_centers = np.asarray(exomol_group["wavenumber"], dtype=np.float64)
+                line_intensities = np.asarray(exomol_group["intensity"], dtype=np.float64)
+                exomol_absorbance = render_absorbance_on_grid(
                     grid,
                     case=case,
                     line_centers=line_centers,
@@ -462,16 +506,15 @@ def plot_combined_pure_nu3_absorbance_progressions(
                     n_exponent=float(metadata["n_exponent"]),
                     line_cutoff=line_cutoff,
                 )
-                line_count = int(line_centers.size)
-                source_file_count = len(selected_payload["source_files"])
-                x_values = grid
-            else:
-                selected_counts["hitran"] += 1
+                exomol_line_count = int(line_centers.size)
+                exomol_source_file_count = len(exomol_group["source_files"])
+
+            if has_hitran:
                 if molecule_id is None or isotopologue_id is None:
                     raise RuntimeError("HITRAN runtime database was not initialized")
                 temp_table = _temp_table_name(source_table, progression_slug, lower_j, upper_j)
                 try:
-                    line_count = _build_temp_table_from_lines(temp_table, source_table, list(selected_payload["raw_lines"]))
+                    hitran_line_count = _build_temp_table_from_lines(temp_table, source_table, list(hitran_group["raw_lines"]))
                     wavenumber, coefficient = hapi.absorptionCoefficient_Voigt(
                         Components=[(molecule_id, isotopologue_id, case.mole_fraction)],
                         SourceTables=[temp_table],
@@ -487,11 +530,34 @@ def plot_combined_pure_nu3_absorbance_progressions(
                         coefficient,
                         Environment={"l": case.path_length_cm},
                     )
-                    absorbance = to_absorbance(np.asarray(transmittance))
-                    x_values = np.asarray(wavenumber, dtype=np.float64)
+                    hitran_absorbance = _align_to_grid(
+                        np.asarray(wavenumber, dtype=np.float64),
+                        to_absorbance(np.asarray(transmittance)),
+                        grid,
+                    )
                 finally:
                     hapi.dropTable(temp_table)
-                source_file_count = len(selected_payload["source_files"])
+                hitran_source_file_count = len(hitran_group["source_files"])
+
+            if has_exomol:
+                presence_counts["exomol_contributing"] += 1
+            if has_hitran:
+                presence_counts["hitran_contributing"] += 1
+            if has_exomol and has_hitran:
+                presence_counts["shared"] += 1
+            elif has_exomol:
+                presence_counts["exomol_only"] += 1
+            else:
+                presence_counts["hitran_only"] += 1
+
+            absorbance = np.maximum(exomol_absorbance, hitran_absorbance)
+            line_count = exomol_line_count + hitran_line_count
+            source_file_count = exomol_source_file_count + hitran_source_file_count
+            peak_index = int(np.argmax(absorbance)) if absorbance.size else 0
+            peak_source = _peak_source_at_index(
+                exomol_value=float(exomol_absorbance[peak_index]) if absorbance.size else 0.0,
+                hitran_value=float(hitran_absorbance[peak_index]) if absorbance.size else 0.0,
+            )
 
             traces.append(
                 {
@@ -501,24 +567,26 @@ def plot_combined_pure_nu3_absorbance_progressions(
                     "delta_j": _delta_j_value(lower_j, upper_j),
                     "branch_label": f"dJ_{_delta_j_value(lower_j, upper_j):+d}",
                     "jpair_label": _format_jpair_label(lower_j, upper_j),
-                    "wavenumber": x_values,
+                    "wavenumber": grid,
                     "absorbance": absorbance,
-                    "grid_point_count": int(np.asarray(x_values).size),
+                    "grid_point_count": int(grid.size),
                     "line_count": line_count,
                     "peak_absorbance": float(np.max(absorbance)) if len(absorbance) else 0.0,
-                    "integrated_absorbance": float(np.trapezoid(absorbance, x_values)) if len(absorbance) else 0.0,
+                    "integrated_absorbance": float(np.trapezoid(absorbance, grid)) if len(absorbance) else 0.0,
                     "source_file_count": source_file_count,
-                    "selected_source": selected_source,
-                    "selected_source_label": _source_label(selected_source),
-                    "available_sources": tuple(available_sources),
-                    "available_sources_text": ", ".join(_source_label(source_name) for source_name in available_sources),
-                    "fallback_used": bool(normalized_source_priority) and selected_source != normalized_source_priority[0],
-                    "fallback_used_text": (
-                        "yes"
-                        if bool(normalized_source_priority) and selected_source != normalized_source_priority[0]
-                        else "no"
-                    ),
-                    "render_mode": render_mode,
+                    "available_sources": available_sources,
+                    "available_sources_text": available_sources_text,
+                    "source_mode": source_mode,
+                    "exomol_line_count": exomol_line_count,
+                    "hitran_line_count": hitran_line_count,
+                    "exomol_source_file_count": exomol_source_file_count,
+                    "hitran_source_file_count": hitran_source_file_count,
+                    "exomol_absorbance": exomol_absorbance,
+                    "hitran_absorbance": hitran_absorbance,
+                    "peak_wavenumber_cm-1": float(grid[peak_index]) if absorbance.size else float("nan"),
+                    "peak_source": peak_source,
+                    "peak_exomol_absorbance": float(exomol_absorbance[peak_index]) if absorbance.size else 0.0,
+                    "peak_hitran_absorbance": float(hitran_absorbance[peak_index]) if absorbance.size else 0.0,
                     "plotted_in_figure": _delta_j_value(lower_j, upper_j) in ABSORBANCE_DELTA_J_VALUES,
                 }
             )
@@ -578,11 +646,17 @@ def plot_combined_pure_nu3_absorbance_progressions(
                     "lower_j": trace["lower_j"],
                     "upper_j": trace["upper_j"],
                     "jpair_label": trace["jpair_label"],
-                    "selected_source": trace["selected_source"],
+                    "source_mode": trace["source_mode"],
                     "available_sources": ", ".join(trace["available_sources"]),
-                    "fallback_used": "yes" if trace["fallback_used"] else "no",
-                    "render_mode": trace["render_mode"],
+                    "peak_source": trace["peak_source"],
+                    "peak_wavenumber_cm-1": f"{float(trace['peak_wavenumber_cm-1']):.6f}",
+                    "peak_exomol_absorbance": f"{float(trace['peak_exomol_absorbance']):.12e}",
+                    "peak_hitran_absorbance": f"{float(trace['peak_hitran_absorbance']):.12e}",
+                    "exomol_line_count": trace["exomol_line_count"],
+                    "hitran_line_count": trace["hitran_line_count"],
                     "line_count": trace["line_count"],
+                    "exomol_source_file_count": trace["exomol_source_file_count"],
+                    "hitran_source_file_count": trace["hitran_source_file_count"],
                     "grid_point_count": trace["grid_point_count"],
                     "peak_absorbance": f"{float(trace['peak_absorbance']):.12e}",
                     "integrated_absorbance": f"{float(trace['integrated_absorbance']):.12e}",
@@ -629,11 +703,17 @@ def plot_combined_pure_nu3_absorbance_progressions(
                 "lower_j",
                 "upper_j",
                 "jpair_label",
-                "selected_source",
+                "source_mode",
                 "available_sources",
-                "fallback_used",
-                "render_mode",
+                "peak_source",
+                "peak_wavenumber_cm-1",
+                "peak_exomol_absorbance",
+                "peak_hitran_absorbance",
+                "exomol_line_count",
+                "hitran_line_count",
                 "line_count",
+                "exomol_source_file_count",
+                "hitran_source_file_count",
                 "grid_point_count",
                 "peak_absorbance",
                 "integrated_absorbance",
@@ -649,8 +729,11 @@ def plot_combined_pure_nu3_absorbance_progressions(
                 "progression_label": progression_label,
                 "lower_mode": _mode_label(lower_mode),
                 "upper_mode": _mode_label(upper_mode),
-                "hitran_selected_jpair_count": selected_counts["hitran"],
-                "exomol_selected_jpair_count": selected_counts["exomol"],
+                "shared_jpair_count": presence_counts["shared"],
+                "hitran_only_jpair_count": presence_counts["hitran_only"],
+                "exomol_only_jpair_count": presence_counts["exomol_only"],
+                "hitran_contributing_jpair_count": presence_counts["hitran_contributing"],
+                "exomol_contributing_jpair_count": presence_counts["exomol_contributing"],
                 "jpair_count": len(traces),
                 "grid_point_count": int(max(int(trace["grid_point_count"]) for trace in traces)),
                 "delta_j_minus_1_count": branch_counts[-1],
@@ -671,8 +754,11 @@ def plot_combined_pure_nu3_absorbance_progressions(
             "progression_label",
             "lower_mode",
             "upper_mode",
-            "hitran_selected_jpair_count",
-            "exomol_selected_jpair_count",
+            "shared_jpair_count",
+            "hitran_only_jpair_count",
+            "exomol_only_jpair_count",
+            "hitran_contributing_jpair_count",
+            "exomol_contributing_jpair_count",
             "jpair_count",
             "grid_point_count",
             "delta_j_minus_1_count",
@@ -695,8 +781,8 @@ def plot_combined_pure_nu3_absorbance_progressions(
         f"- Wavenumber window: `{wn_min:g}` to `{wn_max:g} cm^-1` with `step = {wn_step:g} cm^-1`",
         "- Y axis: `absorbance`",
         "- Progression family: pure `nu3` only with `n1 = n2 = n4 = 0`",
-        "- J-pair source priority: "
-        + " -> ".join(f"`{_source_label(source_name)}`" for source_name in normalized_source_priority),
+        "- J-pair merge rule: if both sources contain the same J pair, the combined curve uses the pointwise maximum of both source contributions",
+        f"- Temperature: `{temperature_k:g} K`",
         f"- Pressure: `{pressure_torr:g} Torr`",
         f"- Mole fraction: `{mole_fraction:g}`",
         f"- Path length: `{path_length_cm:g} cm`",
@@ -714,9 +800,12 @@ def plot_combined_pure_nu3_absorbance_progressions(
                 f"## {row['progression_label']}",
                 "",
                 f"- Modes: `{row['lower_mode']} -> {row['upper_mode']}`",
-                f"- Selected J-pair curves: `{row['jpair_count']}`",
-                f"- Selected from HITRAN: `{row['hitran_selected_jpair_count']}`",
-                f"- Selected from ExoMol: `{row['exomol_selected_jpair_count']}`",
+                f"- J-pair curves: `{row['jpair_count']}`",
+                f"- Shared across both sources: `{row['shared_jpair_count']}`",
+                f"- HITRAN only: `{row['hitran_only_jpair_count']}`",
+                f"- ExoMol only: `{row['exomol_only_jpair_count']}`",
+                f"- J pairs with HITRAN contribution: `{row['hitran_contributing_jpair_count']}`",
+                f"- J pairs with ExoMol contribution: `{row['exomol_contributing_jpair_count']}`",
                 f"- Grid points per curve: `{row['grid_point_count']}`",
                 f"- Plotted branch counts: `delta J=-1: {row['delta_j_minus_1_count']}`, `delta J=0: {row['delta_j_0_count']}`, `delta J=+1: {row['delta_j_plus_1_count']}`",
                 f"- Skipped J pairs outside plotted branches: `{row['skipped_jpair_count']}`",
@@ -736,7 +825,6 @@ def plot_combined_pure_nu3_absorbance_progressions(
             "output_dir": resolved_output_dir,
             "report_path": report_path,
             "sources": normalized_sources,
-            "source_priority": normalized_source_priority,
             "hitran_runtime_db": prepared_runtime_db,
         },
     )
