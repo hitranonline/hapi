@@ -11,6 +11,13 @@ venv/
 env/
 .vscode/
 
+
+artifacts/
+band_intensity_comparisons/
+ch4_nu3_progressions/
+co_nu1_progressions/
+
+
 species_plots_2500_3500/
 species_plots_2500_3500_multiTP/
 species_plots_2500_3500_test/
