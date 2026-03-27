@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import csv
 import json
 import math
@@ -25,8 +26,8 @@ from .spectra import compute_panel_y_limits, save_spectrum_csv, save_spectrum_ht
 FIELD_FORMAT_RE = re.compile(r"%(\d+)(?:\.\d+)?[A-Za-z]")
 TABLE_ID_RE = re.compile(r".*_M(\d+)_I(\d+)")
 MAX_OPEN_OUTPUTS = 128
-HITRAN_BAND_TEXT_FILENAME_RE = re.compile(
-    r"^CH4_M6_I1_"
+BAND_TEXT_FILENAME_RE = re.compile(
+    r"^(?P<source_stem>CH4_M6_I1|CH4_EXOMOL_MM_I1)_"
     r"(?P<lower_n1>\d+)_(?P<lower_n2>\d+)_(?P<lower_n3>\d+)_(?P<lower_n4>\d+)_(?P<lower_sym>[^_]+)"
     r"_to_"
     r"(?P<upper_n1>\d+)_(?P<upper_n2>\d+)_(?P<upper_n3>\d+)_(?P<upper_n4>\d+)_(?P<upper_sym>[^.]+)"
@@ -191,14 +192,15 @@ def band_line_text_dir(root_dir: Path | None = None) -> Path:
 
 
 def _parse_band_text_filename(path: Path) -> dict[str, object]:
-    match = HITRAN_BAND_TEXT_FILENAME_RE.match(path.name)
+    match = BAND_TEXT_FILENAME_RE.match(path.name)
     if match is None:
-        raise ValueError(f"Unrecognized HITRAN band text filename: {path.name}")
+        raise ValueError(f"Unrecognized band text filename: {path.name}")
     groups = match.groupdict()
     lower_mode = tuple(int(groups[f"lower_n{index}"]) for index in range(1, 5))
     upper_mode = tuple(int(groups[f"upper_n{index}"]) for index in range(1, 5))
     return {
         "path": path,
+        "source_stem": str(groups["source_stem"]),
         "lower_mode": lower_mode,
         "upper_mode": upper_mode,
         "lower_sym": str(groups["lower_sym"]),
@@ -620,6 +622,52 @@ def _bootstrap_source_schema(*, source_db_dir: Path, runtime_db_dir: Path, sourc
     return prepared_runtime_db
 
 
+def load_header_json(header_path: Path) -> dict[str, object]:
+    with header_path.open("r", encoding="utf-8") as handle:
+        return json.load(handle)
+
+
+def _row_object_default_from_header(header: dict[str, object]) -> list[tuple[str, object, str]]:
+    order = list(header["order"])
+    format_map = dict(header["format"])
+    default_map = dict(header["default"])
+    return [(name, default_map[name], format_map[name]) for name in order]
+
+
+def _register_source_schema_from_header(*, header_path: Path, source_table: str | None = None) -> str:
+    header = load_header_json(header_path)
+    table_name = str(source_table or header.get("table_name") or header_path.stem)
+    if table_name in hapi.LOCAL_TABLE_CACHE:
+        hapi.dropTable(table_name)
+    hapi.createTable(table_name, _row_object_default_from_header(header))
+    cache_header = hapi.LOCAL_TABLE_CACHE[table_name]["header"]
+    for key, value in header.items():
+        if key in {"order", "format", "default"}:
+            continue
+        cache_header[key] = copy.deepcopy(value)
+    cache_header["table_name"] = table_name
+    cache_header["number_of_rows"] = 0
+    cache_header["size_in_bytes"] = 0
+    return table_name
+
+
+def infer_component_ids_from_input_dir(*, input_dir: Path, header_path: Path) -> tuple[int, int]:
+    positions, widths = load_header_metadata(
+        header_path,
+        required_fields={"molec_id", "local_iso_id"},
+    )
+    for path in sorted(input_dir.glob("*.txt")):
+        with path.open("r", encoding="utf-8") as handle:
+            for raw_line in handle:
+                line = raw_line.rstrip("\r\n")
+                if not line.strip():
+                    continue
+                molecule_id = int(extract_field(line, "molec_id", positions, widths).strip())
+                isotopologue_id = int(extract_field(line, "local_iso_id", positions, widths).strip())
+                return molecule_id, isotopologue_id
+    raise RuntimeError(f"No fixed-width band-text rows found in {input_dir}")
+
+
 def _temp_table_name(source_table: str, progression_slug: str, lower_j: int, upper_j: int) -> str:
     return f"__research_{source_table}_{progression_slug}_J{lower_j}_{upper_j}__"
 
@@ -1012,14 +1060,16 @@ def parse_fixed_width(format_string: str) -> int:
     return int(match.group(1))
 
 
-def load_header_metadata(header_path: Path) -> tuple[dict[str, int], dict[str, int]]:
-    with header_path.open("r", encoding="utf-8") as handle:
-        header = json.load(handle)
-
+def load_header_metadata(
+    header_path: Path,
+    *,
+    required_fields: set[str] | None = None,
+) -> tuple[dict[str, int], dict[str, int]]:
+    header = load_header_json(header_path)
     positions = header["position"]
     widths = {name: parse_fixed_width(fmt) for name, fmt in header["format"].items()}
-    required_fields = {"nu", "global_lower_quanta", "global_upper_quanta"}
-    missing = [name for name in required_fields if name not in positions or name not in widths]
+    effective_required_fields = required_fields or {"nu", "global_lower_quanta", "global_upper_quanta"}
+    missing = [name for name in effective_required_fields if name not in positions or name not in widths]
     if missing:
         raise RuntimeError(f"Header {header_path} is missing required fields: {sorted(missing)}")
     return positions, widths
