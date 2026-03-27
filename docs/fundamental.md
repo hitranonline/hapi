@@ -228,12 +228,25 @@ This matters for the combined J-pair CSV fields:
 - `peak_exomol_absorbance`
 - `peak_hitran_absorbance`
 - `peak_absorbance`
+- `peak_exomol_line_intensity`
+- `peak_hitran_line_intensity`
+- `total_exomol_line_intensity`
+- `total_hitran_line_intensity`
 
-These are curve values evaluated at a peak wavenumber. They are not guaranteed
-to be one-row quantities.
+The absorbance fields are curve values evaluated at a peak wavenumber. They are
+not guaranteed to be one-row quantities.
 
 So if a J pair has more than one ExoMol line or more than one HITRAN line, its
 peak absorbance may be the result of multiple contributing lines.
+
+By contrast, the `*_line_intensity` fields are line-list summaries:
+
+- `peak_*_line_intensity`
+  - strongest single line in that source's J pair
+- `total_*_line_intensity`
+  - sum of all grouped line intensities in that source's J pair
+
+So the absorbance fields and the line-intensity fields are not interchangeable.
 
 ## How This Maps to the Repo
 
@@ -319,6 +332,11 @@ Important fields include:
 - `peak_exomol_absorbance`
 - `peak_hitran_absorbance`
 - `peak_absorbance`
+- `peak_exomol_line_intensity`
+- `peak_hitran_line_intensity`
+- `total_exomol_line_intensity`
+- `total_hitran_line_intensity`
+- `total_intensity_ratio_exomol_to_hitran`
 
 These should be read as:
 
@@ -328,14 +346,29 @@ These should be read as:
   - HITRAN absorbance value at the combined peak wavenumber
 - `peak_absorbance`
   - the final combined peak value for that J pair
+- `peak_exomol_line_intensity`
+  - strongest single ExoMol line intensity inside that J pair
+- `peak_hitran_line_intensity`
+  - strongest single HITRAN line intensity inside that J pair
+- `total_exomol_line_intensity`
+  - sum of all grouped ExoMol line intensities inside that J pair
+- `total_hitran_line_intensity`
+  - sum of all grouped HITRAN line intensities inside that J pair
+- `total_intensity_ratio_exomol_to_hitran`
+  - ratio of overall grouped line strength, not ratio of absorbance peaks
 
-These are evaluated on the modeled curve. They are not copied directly from one
-line row and are not the same kind of quantity as line intensity.
+Only the `peak_*_absorbance` and `peak_absorbance` fields are evaluated on the
+modeled curve. They are not copied directly from one line row.
+
+The `*_line_intensity` and `total_intensity_ratio_exomol_to_hitran` fields are
+line-list summary values, not curve values.
 
 So when reading the CSV:
 
 - treat `sw` or ExoMol line intensity as line-list input
 - treat `peak_*_absorbance` as modeled spectrum output
+- treat `peak_*_line_intensity` and `total_*_line_intensity` as grouped
+  line-strength summaries
 
 Those are different stages of the workflow.
 

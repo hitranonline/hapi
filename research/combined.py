@@ -145,6 +145,36 @@ def _peak_source_at_index(
     return "hitran"
 
 
+def _peak_and_total_line_intensity_from_values(values: np.ndarray) -> tuple[float, float]:
+    intensity_values = np.asarray(values, dtype=np.float64)
+    if intensity_values.size == 0:
+        return 0.0, 0.0
+    return float(np.max(intensity_values)), float(np.sum(intensity_values))
+
+
+def _sw_from_row_object(row_object: list[tuple[str, object, str]]) -> float:
+    for field_name, field_value, _field_format in row_object:
+        if field_name == "sw":
+            return float(field_value)
+    raise KeyError("Missing sw field in parsed HAPI row object")
+
+
+def _peak_and_total_line_intensity_from_raw_lines(raw_lines: list[str], source_table: str) -> tuple[float, float]:
+    if not raw_lines:
+        return 0.0, 0.0
+    intensities = np.asarray(
+        [_sw_from_row_object(hapi.getRowObjectFromString(line, source_table)) for line in raw_lines],
+        dtype=np.float64,
+    )
+    return _peak_and_total_line_intensity_from_values(intensities)
+
+
+def _total_intensity_ratio(*, has_exomol: bool, has_hitran: bool, exomol_total: float, hitran_total: float) -> float:
+    if not has_exomol or not has_hitran or hitran_total <= 0.0:
+        return float("nan")
+    return float(exomol_total / hitran_total)
+
+
 def _collect_hitran_pure_nu3_groups(
     input_dir: Path,
     *,
@@ -286,6 +316,57 @@ def _save_combined_progression_png(
     return path
 
 
+def _html_label_annotations(
+    candidates: list[dict[str, object]],
+    *,
+    wn_min: float,
+    wn_max: float,
+) -> list[dict[str, object]]:
+    if not candidates:
+        return []
+
+    threshold_x = wn_min + 0.70 * (wn_max - wn_min)
+
+    def stagger_sequence(count: int) -> list[int]:
+        offsets = [0]
+        step = 18
+        level = 1
+        while len(offsets) < count:
+            offsets.append(-step * level)
+            if len(offsets) < count:
+                offsets.append(step * level)
+            level += 1
+        return offsets[:count]
+
+    right_side = sorted(
+        [item for item in candidates if float(item["peak_x"]) < threshold_x],
+        key=lambda item: (float(item["peak_x"]), float(item["peak_y"])),
+    )
+    left_side = sorted(
+        [item for item in candidates if float(item["peak_x"]) >= threshold_x],
+        key=lambda item: (float(item["peak_x"]), float(item["peak_y"])),
+    )
+
+    annotations: list[dict[str, object]] = []
+    for side_items, direction in ((right_side, "right"), (left_side, "left")):
+        base_ax = 60 if direction == "right" else -60
+        xanchor = "left" if direction == "right" else "right"
+        for item, ay in zip(side_items, stagger_sequence(len(side_items))):
+            annotations.append(
+                {
+                    "x": float(item["peak_x"]),
+                    "y": float(item["peak_y"]),
+                    "text": str(item["text"]),
+                    "color": str(item["color"]),
+                    "ax": base_ax,
+                    "ay": ay,
+                    "xanchor": xanchor,
+                }
+            )
+
+    return annotations
+
+
 def _save_combined_progression_html(
     path: Path,
     *,
@@ -360,10 +441,11 @@ def _save_combined_progression_html(
         xref = f"x{axis_suffix}"
         yref = f"y{axis_suffix}"
         label_items = labeled_traces_by_delta_j.get(delta_j, [])
-        for item in label_items:
+        html_annotations = _html_label_annotations(label_items, wn_min=wn_min, wn_max=wn_max)
+        for item in html_annotations:
             figure.add_annotation(
-                x=item["label_x"],
-                y=item["label_y"],
+                x=item["x"],
+                y=item["y"],
                 xref=xref,
                 yref=yref,
                 text=item["text"],
@@ -371,14 +453,15 @@ def _save_combined_progression_html(
                 arrowhead=0,
                 arrowcolor=item["color"],
                 arrowwidth=1.0,
-                axref=xref,
-                ayref=yref,
-                ax=item["peak_x"],
-                ay=item["peak_y"],
+                ax=item["ax"],
+                ay=item["ay"],
+                axref="pixel",
+                ayref="pixel",
+                xanchor=item["xanchor"],
                 font={"color": item["color"], "size": 11},
                 bgcolor="rgba(255,255,255,0.7)",
             )
-        y_min, y_max = compute_panel_y_limits(branch_traces, y_key="absorbance", label_items=label_items)
+        y_min, y_max = compute_panel_y_limits(branch_traces, y_key="absorbance")
         figure.update_yaxes(
             title_text="Absorbance",
             tickformat=".2e",
@@ -558,6 +641,10 @@ def plot_combined_pure_nu3_absorbance_progressions(
             hitran_line_count = 0
             exomol_source_file_count = 0
             hitran_source_file_count = 0
+            peak_exomol_line_intensity = 0.0
+            peak_hitran_line_intensity = 0.0
+            total_exomol_line_intensity = 0.0
+            total_hitran_line_intensity = 0.0
 
             if has_exomol:
                 line_centers = np.asarray(exomol_group["wavenumber"], dtype=np.float64)
@@ -574,6 +661,9 @@ def plot_combined_pure_nu3_absorbance_progressions(
                 )
                 exomol_line_count = int(line_centers.size)
                 exomol_source_file_count = len(exomol_group["source_files"])
+                peak_exomol_line_intensity, total_exomol_line_intensity = _peak_and_total_line_intensity_from_values(
+                    line_intensities
+                )
 
             if has_hitran:
                 if molecule_id is None or isotopologue_id is None:
@@ -604,6 +694,10 @@ def plot_combined_pure_nu3_absorbance_progressions(
                 finally:
                     hapi.dropTable(temp_table)
                 hitran_source_file_count = len(hitran_group["source_files"])
+                peak_hitran_line_intensity, total_hitran_line_intensity = _peak_and_total_line_intensity_from_raw_lines(
+                    list(hitran_group["raw_lines"]),
+                    source_table,
+                )
 
             if has_exomol:
                 presence_counts["exomol_contributing"] += 1
@@ -620,6 +714,12 @@ def plot_combined_pure_nu3_absorbance_progressions(
             line_count = exomol_line_count + hitran_line_count
             source_file_count = exomol_source_file_count + hitran_source_file_count
             peak_index = int(np.argmax(absorbance)) if absorbance.size else 0
+            total_intensity_ratio = _total_intensity_ratio(
+                has_exomol=has_exomol,
+                has_hitran=has_hitran,
+                exomol_total=total_exomol_line_intensity,
+                hitran_total=total_hitran_line_intensity,
+            )
             peak_source = _peak_source_at_index(
                 exomol_value=float(exomol_absorbance[peak_index]) if absorbance.size else 0.0,
                 hitran_value=float(hitran_absorbance[peak_index]) if absorbance.size else 0.0,
@@ -653,6 +753,11 @@ def plot_combined_pure_nu3_absorbance_progressions(
                     "peak_source": peak_source,
                     "peak_exomol_absorbance": float(exomol_absorbance[peak_index]) if absorbance.size else 0.0,
                     "peak_hitran_absorbance": float(hitran_absorbance[peak_index]) if absorbance.size else 0.0,
+                    "peak_exomol_line_intensity": peak_exomol_line_intensity,
+                    "peak_hitran_line_intensity": peak_hitran_line_intensity,
+                    "total_exomol_line_intensity": total_exomol_line_intensity,
+                    "total_hitran_line_intensity": total_hitran_line_intensity,
+                    "total_intensity_ratio_exomol_to_hitran": total_intensity_ratio,
                     "plotted_in_figure": _delta_j_value(lower_j, upper_j) in ABSORBANCE_DELTA_J_VALUES,
                 }
             )
@@ -718,6 +823,11 @@ def plot_combined_pure_nu3_absorbance_progressions(
                     "peak_wavenumber_cm-1": f"{float(trace['peak_wavenumber_cm-1']):.6f}",
                     "peak_exomol_absorbance": f"{float(trace['peak_exomol_absorbance']):.12e}",
                     "peak_hitran_absorbance": f"{float(trace['peak_hitran_absorbance']):.12e}",
+                    "peak_exomol_line_intensity": f"{float(trace['peak_exomol_line_intensity']):.12e}",
+                    "peak_hitran_line_intensity": f"{float(trace['peak_hitran_line_intensity']):.12e}",
+                    "total_exomol_line_intensity": f"{float(trace['total_exomol_line_intensity']):.12e}",
+                    "total_hitran_line_intensity": f"{float(trace['total_hitran_line_intensity']):.12e}",
+                    "total_intensity_ratio_exomol_to_hitran": f"{float(trace['total_intensity_ratio_exomol_to_hitran']):.12e}",
                     "exomol_line_count": trace["exomol_line_count"],
                     "hitran_line_count": trace["hitran_line_count"],
                     "line_count": trace["line_count"],
@@ -775,6 +885,11 @@ def plot_combined_pure_nu3_absorbance_progressions(
                 "peak_wavenumber_cm-1",
                 "peak_exomol_absorbance",
                 "peak_hitran_absorbance",
+                "peak_exomol_line_intensity",
+                "peak_hitran_line_intensity",
+                "total_exomol_line_intensity",
+                "total_hitran_line_intensity",
+                "total_intensity_ratio_exomol_to_hitran",
                 "exomol_line_count",
                 "hitran_line_count",
                 "line_count",
@@ -1054,16 +1169,21 @@ def plot_combined_exomol_i1_absorbance_progressions(
             hitran_line_count = 0
             exomol_source_file_count = 0
             hitran_source_file_count = 0
+            peak_exomol_line_intensity = 0.0
+            peak_hitran_line_intensity = 0.0
+            total_exomol_line_intensity = 0.0
+            total_hitran_line_intensity = 0.0
 
             if has_exomol:
                 if exomol_source_table is None or exomol_component_ids is None:
                     raise RuntimeError("ExoMol MM I1 schema was not initialized")
+                exomol_raw_lines = list(exomol_group["raw_lines"])
                 exomol_absorbance, exomol_line_count = _render_hapi_absorbance_from_raw_lines(
                     source_table=exomol_source_table,
                     progression_slug=progression_slug,
                     lower_j=lower_j,
                     upper_j=upper_j,
-                    raw_lines=list(exomol_group["raw_lines"]),
+                    raw_lines=exomol_raw_lines,
                     molecule_id=exomol_component_ids[0],
                     isotopologue_id=exomol_component_ids[1],
                     case=case,
@@ -1073,16 +1193,21 @@ def plot_combined_exomol_i1_absorbance_progressions(
                     grid=grid,
                 )
                 exomol_source_file_count = len(exomol_group["source_files"])
+                peak_exomol_line_intensity, total_exomol_line_intensity = _peak_and_total_line_intensity_from_raw_lines(
+                    exomol_raw_lines,
+                    exomol_source_table,
+                )
 
             if has_hitran:
                 if hitran_source_table is None or hitran_component_ids is None:
                     raise RuntimeError("HITRAN schema was not initialized")
+                hitran_raw_lines = list(hitran_group["raw_lines"])
                 hitran_absorbance, hitran_line_count = _render_hapi_absorbance_from_raw_lines(
                     source_table=hitran_source_table,
                     progression_slug=progression_slug,
                     lower_j=lower_j,
                     upper_j=upper_j,
-                    raw_lines=list(hitran_group["raw_lines"]),
+                    raw_lines=hitran_raw_lines,
                     molecule_id=hitran_component_ids[0],
                     isotopologue_id=hitran_component_ids[1],
                     case=case,
@@ -1092,6 +1217,10 @@ def plot_combined_exomol_i1_absorbance_progressions(
                     grid=grid,
                 )
                 hitran_source_file_count = len(hitran_group["source_files"])
+                peak_hitran_line_intensity, total_hitran_line_intensity = _peak_and_total_line_intensity_from_raw_lines(
+                    hitran_raw_lines,
+                    hitran_source_table,
+                )
 
             if has_exomol:
                 presence_counts["exomol_contributing"] += 1
@@ -1108,6 +1237,12 @@ def plot_combined_exomol_i1_absorbance_progressions(
             line_count = exomol_line_count + hitran_line_count
             source_file_count = exomol_source_file_count + hitran_source_file_count
             peak_index = int(np.argmax(absorbance)) if absorbance.size else 0
+            total_intensity_ratio = _total_intensity_ratio(
+                has_exomol=has_exomol,
+                has_hitran=has_hitran,
+                exomol_total=total_exomol_line_intensity,
+                hitran_total=total_hitran_line_intensity,
+            )
             peak_source = _peak_source_at_index(
                 exomol_value=float(exomol_absorbance[peak_index]) if absorbance.size else 0.0,
                 hitran_value=float(hitran_absorbance[peak_index]) if absorbance.size else 0.0,
@@ -1141,6 +1276,11 @@ def plot_combined_exomol_i1_absorbance_progressions(
                     "peak_source": peak_source,
                     "peak_exomol_absorbance": float(exomol_absorbance[peak_index]) if absorbance.size else 0.0,
                     "peak_hitran_absorbance": float(hitran_absorbance[peak_index]) if absorbance.size else 0.0,
+                    "peak_exomol_line_intensity": peak_exomol_line_intensity,
+                    "peak_hitran_line_intensity": peak_hitran_line_intensity,
+                    "total_exomol_line_intensity": total_exomol_line_intensity,
+                    "total_hitran_line_intensity": total_hitran_line_intensity,
+                    "total_intensity_ratio_exomol_to_hitran": total_intensity_ratio,
                     "plotted_in_figure": _delta_j_value(lower_j, upper_j) in ABSORBANCE_DELTA_J_VALUES,
                 }
             )
@@ -1206,6 +1346,11 @@ def plot_combined_exomol_i1_absorbance_progressions(
                     "peak_wavenumber_cm-1": f"{float(trace['peak_wavenumber_cm-1']):.6f}",
                     "peak_exomol_absorbance": f"{float(trace['peak_exomol_absorbance']):.12e}",
                     "peak_hitran_absorbance": f"{float(trace['peak_hitran_absorbance']):.12e}",
+                    "peak_exomol_line_intensity": f"{float(trace['peak_exomol_line_intensity']):.12e}",
+                    "peak_hitran_line_intensity": f"{float(trace['peak_hitran_line_intensity']):.12e}",
+                    "total_exomol_line_intensity": f"{float(trace['total_exomol_line_intensity']):.12e}",
+                    "total_hitran_line_intensity": f"{float(trace['total_hitran_line_intensity']):.12e}",
+                    "total_intensity_ratio_exomol_to_hitran": f"{float(trace['total_intensity_ratio_exomol_to_hitran']):.12e}",
                     "exomol_line_count": trace["exomol_line_count"],
                     "hitran_line_count": trace["hitran_line_count"],
                     "line_count": trace["line_count"],
@@ -1263,6 +1408,11 @@ def plot_combined_exomol_i1_absorbance_progressions(
                 "peak_wavenumber_cm-1",
                 "peak_exomol_absorbance",
                 "peak_hitran_absorbance",
+                "peak_exomol_line_intensity",
+                "peak_hitran_line_intensity",
+                "total_exomol_line_intensity",
+                "total_hitran_line_intensity",
+                "total_intensity_ratio_exomol_to_hitran",
                 "exomol_line_count",
                 "hitran_line_count",
                 "line_count",

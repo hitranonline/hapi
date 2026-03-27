@@ -393,6 +393,11 @@ For each J pair in the combined workflow, the CSV now records:
 
 - `source_mode`
 - `available_sources`
+- `peak_exomol_line_intensity`
+- `peak_hitran_line_intensity`
+- `total_exomol_line_intensity`
+- `total_hitran_line_intensity`
+- `total_intensity_ratio_exomol_to_hitran`
 - `exomol_line_count`
 - `hitran_line_count`
 - `line_count`
@@ -407,6 +412,9 @@ This is the direct answer to your review requirement:
 
 - how many lines came from ExoMol
 - how many lines came from HITRAN
+- how strong the strongest ExoMol line is in that J pair
+- how strong the strongest HITRAN line is in that J pair
+- how the total ExoMol line strength compares with the total HITRAN line strength
 - which source dominates at the plotted peak
 
 Important detail:
@@ -414,6 +422,42 @@ Important detail:
 - `peak_source` means the source contributing more absorbance at the combined peak wavenumber
 - `peak_source` can be `exomol`, `hitran`, `both`, or `none`
 - it is not a raw database row ID
+
+The new intensity fields are line-list summaries, not curve summaries:
+
+- `peak_exomol_line_intensity`
+  - the strongest single ExoMol line intensity inside that J pair
+- `peak_hitran_line_intensity`
+  - the strongest single HITRAN line intensity inside that J pair
+- `total_exomol_line_intensity`
+  - the sum of all grouped ExoMol line intensities inside that J pair
+- `total_hitran_line_intensity`
+  - the sum of all grouped HITRAN line intensities inside that J pair
+- `total_intensity_ratio_exomol_to_hitran`
+  - `total_exomol_line_intensity / total_hitran_line_intensity`
+
+Behavior rules:
+
+- if a source is missing for that J pair, its `peak_*_line_intensity` and `total_*_line_intensity` values are `0.0`
+- if HITRAN is missing or its total intensity is not positive, `total_intensity_ratio_exomol_to_hitran` is written as `nan`
+
+This gives two different comparison layers in the same CSV:
+
+- absorbance comparison:
+  - `peak_exomol_absorbance`
+  - `peak_hitran_absorbance`
+  - `peak_absorbance`
+- line-list intensity comparison:
+  - `peak_exomol_line_intensity`
+  - `peak_hitran_line_intensity`
+  - `total_exomol_line_intensity`
+  - `total_hitran_line_intensity`
+  - `total_intensity_ratio_exomol_to_hitran`
+
+So the practical reading rule is:
+
+- use `peak_*_absorbance` when you want to compare modeled spectra
+- use `peak_*_line_intensity` and `total_*_line_intensity` when you want to compare the underlying grouped line strengths
 
 ### Important comparison rule
 

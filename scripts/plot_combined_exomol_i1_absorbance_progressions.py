@@ -77,7 +77,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--wn-min", type=float, default=2500.0, help="Minimum wavenumber in cm^-1.")
     parser.add_argument("--wn-max", type=float, default=3500.0, help="Maximum wavenumber in cm^-1.")
-    parser.add_argument("--wn-step", type=float, default=0.1, help="Wavenumber step in cm^-1.")
+    parser.add_argument("--wn-step", type=float, default=0.001, help="Wavenumber step in cm^-1.")
     parser.add_argument("--temperature-k", type=float, default=600.0, help="Gas temperature in K.")
     parser.add_argument("--pressure-torr", type=float, default=3.0, help="Total pressure in Torr.")
     parser.add_argument("--mole-fraction", type=float, default=0.008, help="CH4 mole fraction.")
