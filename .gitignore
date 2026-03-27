@@ -9,6 +9,7 @@ hitran_api.egg-info/
 .venv*/
 venv/
 env/
+.vscode/
 
 species_plots_2500_3500/
 species_plots_2500_3500_multiTP/
