@@ -10,7 +10,7 @@ hitran_api.egg-info/
 venv/
 env/
 .vscode/
-
+hitran_db/
 
 artifacts/
 band_intensity_comparisons/
