@@ -85,8 +85,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--intensity-threshold",
         type=float,
+        default=0.0,
+        help="HAPI intensity threshold used for ExoMol MM I1 temp-table rendering.",
+    )
+    parser.add_argument(
+        "--hitran-intensity-threshold",
+        type=float,
         default=1.0e-23,
-        help="HAPI intensity threshold used for both ExoMol and HITRAN temp-table rendering.",
+        help="HAPI intensity threshold used for HITRAN temp-table rendering.",
     )
     parser.add_argument(
         "--label-top-n-per-delta-j",
@@ -134,6 +140,7 @@ def main() -> int:
         mole_fraction=args.mole_fraction,
         path_length_cm=args.path_length_cm,
         intensity_threshold=args.intensity_threshold,
+        hitran_intensity_threshold=args.hitran_intensity_threshold,
         label_top_n_per_delta_j=args.label_top_n_per_delta_j,
         html_max_points=args.html_max_points,
         forced_j_pairs=None if args.forced_j_pairs is None else tuple(args.forced_j_pairs),

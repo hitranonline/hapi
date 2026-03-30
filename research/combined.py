@@ -276,17 +276,18 @@ def _save_combined_progression_png(
         f"{_mode_label(lower_mode)} -> {_mode_label(upper_mode)}"
     )
     for axis, delta_j in zip(axes, ABSORBANCE_DELTA_J_VALUES):
+        branch_color = _DELTA_J_COLORS.get(delta_j, plt.cm.tab10(3))
         branch_traces = [trace for trace in traces if int(trace["delta_j"]) == delta_j and bool(trace["plotted_in_figure"])]
         label_items = labeled_traces_by_delta_j.get(delta_j, [])
         for trace in branch_traces:
-            axis.plot(trace["wavenumber"], trace["absorbance"], color=trace["color"], linewidth=1.0, alpha=0.95)
+            axis.plot(trace["wavenumber"], trace["absorbance"], color=branch_color, linewidth=1.0, alpha=0.95)
         for item in label_items:
-            axis.plot([item["peak_x"], item["label_x"]], [item["peak_y"], item["label_y"]], color=item["color"], linewidth=0.8, alpha=0.8)
+            axis.plot([item["peak_x"], item["label_x"]], [item["peak_y"], item["label_y"]], color=branch_color, linewidth=0.8, alpha=0.8)
             axis.text(
                 item["label_x"],
                 item["label_y"],
                 item["text"],
-                color=item["color"],
+                color=branch_color,
                 fontsize=8,
                 ha="left",
                 va="center",
@@ -1026,7 +1027,8 @@ def plot_combined_exomol_i1_absorbance_progressions(
     pressure_torr: float = 3.0,
     mole_fraction: float = 0.008,
     path_length_cm: float = 100.0,
-    intensity_threshold: float = 1.0e-23,
+    intensity_threshold: float = 0.0,
+    hitran_intensity_threshold: float = 1.0e-23,
     label_top_n_per_delta_j: int = 8,
     html_max_points: int = 5000,
     forced_j_pairs: tuple[tuple[int, int], ...] | None = None,
@@ -1213,7 +1215,7 @@ def plot_combined_exomol_i1_absorbance_progressions(
                     case=case,
                     window=window,
                     diluent=diluent,
-                    intensity_threshold=intensity_threshold,
+                    intensity_threshold=hitran_intensity_threshold,
                     grid=grid,
                 )
                 hitran_source_file_count = len(hitran_group["source_files"])
@@ -1518,7 +1520,8 @@ def plot_combined_exomol_i1_absorbance_progressions(
         f"- Pressure: `{pressure_torr:g} Torr`",
         f"- Mole fraction: `{mole_fraction:g}`",
         f"- Path length: `{path_length_cm:g} cm`",
-        f"- HAPI intensity threshold: `{intensity_threshold:.3e}`",
+        f"- ExoMol MM I1 HAPI intensity threshold: `{intensity_threshold:.3e}`",
+        f"- HITRAN HAPI intensity threshold: `{hitran_intensity_threshold:.3e}`",
         f"- On-figure labels: strongest `{label_top_n_per_delta_j}` J pairs per `delta J` panel, plus forced labels for `{', '.join(_format_jpair_label(lower_j, upper_j) for lower_j, upper_j in effective_forced_j_pairs)}` when present",
         f"- HTML traces are decimated to at most `{html_max_points}` points per J pair for responsiveness",
         f"- Summary CSV: [{summary_csv_path.name}]({summary_csv_path.name})",
