@@ -1,3 +1,0 @@
-category,mode_pair,mode_pair_label,category_label,line_count,band_count,csv_path,html_path
-first_overtone_band,nu3 0->2,nu3 0->2,nu3 0->2 | first_overtone_band,52,2,ch4_nu3_progressions\categories\CH4_nu3_first_overtone_band_0_to_2_abs_2500_3500_T600K_P3Torr_L100cm.csv,ch4_nu3_progressions\categories\CH4_nu3_first_overtone_band_0_to_2_abs_2500_3500_T600K_P3Torr_L100cm.html
-fundamental_band,nu3 0->1,nu3 0->1,nu3 0->1 | fundamental_band,11612,7,ch4_nu3_progressions\categories\CH4_nu3_fundamental_band_0_to_1_abs_2500_3500_T600K_P3Torr_L100cm.csv,ch4_nu3_progressions\categories\CH4_nu3_fundamental_band_0_to_1_abs_2500_3500_T600K_P3Torr_L100cm.html
