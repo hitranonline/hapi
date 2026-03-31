@@ -1,10 +1,11 @@
-# Three nu3 Absorbance Scripts
+# Four nu3 Absorbance Scripts
 
-This note is only about these three scripts:
+This note is about these four scripts:
 
 - `scripts/plot_exomol_sorted_nu3_absorbance_progressions.py`
 - `scripts/plot_hitran_band_text_absorbance_progressions.py`
 - `scripts/plot_combined_pure_nu3_absorbance_progressions.py`
+- `scripts/plot_combined_exomol_i1_absorbance_progressions.py`
 
 This version is written as direct answers to the main questions in review:
 
@@ -187,7 +188,7 @@ Absorbance computation:
 - ExoMol contribution uses the ExoMol modeling path
 - HITRAN contribution uses the HAPI Voigt path
 
-So "combined" now means one merged J-pair curve.
+So "combined (pure nu3)" now means one merged J-pair curve.
 
 It means:
 
@@ -199,6 +200,53 @@ This is closer to what you described in review:
 
 - the key is not to choose one source
 - the key is to make one uniform J pair so the peak is less likely to disappear when one dataset misses part of the set
+
+### Combined ExoMol MM I1 script
+
+Wrapper:
+
+- `scripts/plot_combined_exomol_i1_absorbance_progressions.py`
+
+Main function:
+
+- `research.combined.plot_combined_exomol_i1_absorbance_progressions`
+
+ExoMol input:
+
+- `exomol_ch4_mm_i1_pure_nu3_band_texts_hitran_style`
+- header: `hitran_exomolCH4_db/CH4_EXOMOL_MM_I1.header`
+
+This is a different ExoMol source than the combined pure nu3 script. The MM I1 source uses fixed-width HITRAN-style band texts extracted from ExoMol with isotopologue I1.
+
+Absorbance computation:
+
+- both ExoMol MM I1 and HITRAN contributions use the same HAPI Voigt path
+- for each J pair, the code rebuilds a temporary HAPI table from raw rows, then calls `hapi.absorptionCoefficient_Voigt`
+- this is different from the combined pure nu3 script, where ExoMol uses `render_absorbance_on_grid` (direct Voigt sum)
+
+Key difference: separate intensity thresholds.
+
+The ExoMol MM I1 source has much weaker reference-temperature line intensities for hot bands (nu3 1->2, 2->3, 3->4), often around 1e-26 to 1e-25 cm/molecule. HAPI's `IntensityThreshold` filter operates on reference-temperature intensities. If a single threshold is used, hot-band lines get filtered out entirely, producing zero absorbance even at high temperatures where those bands would be physically significant.
+
+To solve this, the function takes two separate thresholds:
+
+- `intensity_threshold` (default `0.0`) — for ExoMol MM I1 temp-table rendering
+- `hitran_intensity_threshold` (default `1e-23`) — for HITRAN temp-table rendering
+
+CLI arguments:
+
+- `--intensity-threshold` controls ExoMol (default `0.0`)
+- `--hitran-intensity-threshold` controls HITRAN (default `1e-23`)
+
+The merge rule is the same as the combined pure nu3 script: pointwise maximum when both sources exist.
+
+PNG subplot colors:
+
+- all three delta J panels use the same branch color as each other:
+  - delta J = -1: blue
+  - delta J = 0: orange
+  - delta J = +1: green
+- this matches the overlay convention so traces are visually consistent across panels
 
 ## 5. Why a label can appear even if there is no obvious peak
 
@@ -597,7 +645,7 @@ User can control:
 
 So HITRAN already exposes the full case more directly.
 
-### Combined script
+### Combined pure nu3 script
 
 User can control:
 
@@ -624,6 +672,28 @@ Important detail:
 - the same CLI case is applied to both ExoMol and HITRAN inside the combined run
 - this includes temperature, pressure, mole fraction, and path length
 - the existing ExoMol exported text files still carry `T296.0K` in their filenames, so changing `--temperature-k` changes the modeled absorbance case without changing those source file names
+
+### Combined ExoMol MM I1 script
+
+User can control:
+
+- `--wn-min`
+- `--wn-max`
+- `--wn-step`
+- `--temperature-k`
+- `--pressure-torr`
+- `--mole-fraction`
+- `--path-length-cm`
+- `--intensity-threshold` (ExoMol, default `0.0`)
+- `--hitran-intensity-threshold` (HITRAN, default `1e-23`)
+- `--sources`
+- label-count settings
+
+The two intensity thresholds are independent:
+
+- `--intensity-threshold` only affects ExoMol MM I1 lines going through HAPI
+- `--hitran-intensity-threshold` only affects HITRAN lines going through HAPI
+- setting ExoMol to `0.0` ensures weak hot-band lines are not filtered out at reference temperature
 
 ## 13. The most important current discussion point
 
@@ -676,6 +746,7 @@ If we continue the discussion, these are the most important code areas to read n
 ### Combined source merge logic
 
 - merged-source J-pair logic inside `research.combined.plot_combined_pure_nu3_absorbance_progressions`
+- merged-source J-pair logic inside `research.combined.plot_combined_exomol_i1_absorbance_progressions`
 
 If needed, the next pass should be line-by-line on:
 

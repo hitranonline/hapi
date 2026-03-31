@@ -258,6 +258,13 @@ def _render_hapi_absorbance_from_raw_lines(
         hapi.dropTable(temp_table)
 
 
+_DELTA_J_COLORS: dict[int | str, tuple] = {
+    -1: plt.cm.tab10(0),
+     0: plt.cm.tab10(1),
+     1: plt.cm.tab10(2),
+}
+
+
 def _save_combined_progression_png(
     path: Path,
     *,
@@ -270,12 +277,12 @@ def _save_combined_progression_png(
     wn_max: float,
 ) -> Path:
     ensure_directory(path.parent)
-    figure, axes = plt.subplots(3, 1, figsize=(16, 12), sharex=True, constrained_layout=True)
+    figure, axes = plt.subplots(4, 1, figsize=(16, 15), sharex=True, constrained_layout=True)
     figure.suptitle(
         f"{progression_label} combined absorbance by J pair, split by delta J\n"
         f"{_mode_label(lower_mode)} -> {_mode_label(upper_mode)}"
     )
-    for axis, delta_j in zip(axes, ABSORBANCE_DELTA_J_VALUES):
+    for axis, delta_j in zip(axes[:3], ABSORBANCE_DELTA_J_VALUES):
         branch_color = _DELTA_J_COLORS.get(delta_j, plt.cm.tab10(3))
         branch_traces = [trace for trace in traces if int(trace["delta_j"]) == delta_j and bool(trace["plotted_in_figure"])]
         label_items = labeled_traces_by_delta_j.get(delta_j, [])
@@ -311,7 +318,34 @@ def _save_combined_progression_png(
                 fontsize=10,
                 color="#666666",
             )
-    axes[-1].set_xlabel("Wavenumber (cm^-1)")
+    overlay_axis = axes[3]
+    all_plotted = [t for t in traces if bool(t["plotted_in_figure"])]
+    total_jpairs = len(all_plotted)
+    legend_added: set[str] = set()
+    for trace in all_plotted:
+        dj = int(trace["delta_j"])
+        color = _DELTA_J_COLORS.get(dj, plt.cm.tab10(3))
+        label_str = f"\u0394J = {dj:+d}"
+        show_label = label_str not in legend_added
+        if show_label:
+            legend_added.add(label_str)
+        overlay_axis.plot(
+            trace["wavenumber"],
+            trace["absorbance"],
+            color=color,
+            linewidth=0.8,
+            alpha=0.7,
+            label=label_str if show_label else "_nolegend_",
+        )
+    overlay_axis.set_xlim(wn_min, wn_max)
+    y_min, y_max = compute_panel_y_limits(all_plotted, y_key="absorbance")
+    overlay_axis.set_ylim(y_min, y_max)
+    overlay_axis.set_ylabel("Absorbance")
+    overlay_axis.set_title(f"All \u0394J overlaid ({total_jpairs} J pairs)")
+    overlay_axis.grid(True, alpha=0.25, linewidth=0.5)
+    overlay_axis.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
+    overlay_axis.legend(loc="upper right", fontsize=8, framealpha=0.8)
+    overlay_axis.set_xlabel("Wavenumber (cm^-1)")
     figure.savefig(path, dpi=200)
     plt.close(figure)
     return path

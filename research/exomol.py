@@ -177,6 +177,8 @@ def load_state_arrays(states_path: Path, nstates: int) -> tuple[np.ndarray, np.n
 
 def load_scan_state_arrays(states_path: Path, nstates: int):
     energies = np.empty(nstates + 1, dtype=np.float64)
+    g_totals = np.empty(nstates + 1, dtype=np.float64)
+    j_values = np.empty(nstates + 1, dtype=np.int16)
     n1 = np.empty(nstates + 1, dtype=np.int16)
     n2 = np.empty(nstates + 1, dtype=np.int16)
     n3 = np.empty(nstates + 1, dtype=np.int16)
@@ -184,6 +186,8 @@ def load_scan_state_arrays(states_path: Path, nstates: int):
     symmetry = np.empty(nstates + 1, dtype=np.int8)
 
     energies.fill(np.nan)
+    g_totals.fill(np.nan)
+    j_values.fill(-1)
     n1.fill(-1)
     n2.fill(-1)
     n3.fill(-1)
@@ -198,6 +202,8 @@ def load_scan_state_arrays(states_path: Path, nstates: int):
 
         state_id = int(parts[0])
         energies[state_id] = float(parts[1])
+        g_totals[state_id] = float(parts[2])
+        j_values[state_id] = int(parts[3])
         symmetry[state_id] = symmetry_to_code.get(parts[6], 0)
         n1[state_id] = int(parts[9])
         n2[state_id] = int(parts[10])
@@ -206,7 +212,7 @@ def load_scan_state_arrays(states_path: Path, nstates: int):
 
     if np.isnan(energies[1:]).any():
         raise RuntimeError(f"State energies were not fully populated from {states_path}")
-    return energies, n1, n2, n3, n4, symmetry
+    return energies, g_totals, j_values, n1, n2, n3, n4, symmetry
 
 
 def lte_line_intensity_cm_per_molecule(
@@ -279,6 +285,108 @@ def collect_relevant_transitions(
             stats["kept"] += 1
 
     return np.asarray(kept_wavenumbers), np.asarray(kept_intensities), stats
+
+
+DIRECT_NU3_PROGRESSIONS = tuple(
+    (lower_nu3, lower_nu3 + 1) for lower_nu3 in range(4)
+)
+
+
+def collect_nu3_transitions_by_jpair(
+    *,
+    data_dir: Path | None = None,
+    wn_min: float = 2500.0,
+    wn_max: float = 3500.0,
+    wing: float = 0.5,
+    temperature_k: float = 600.0,
+    intensity_threshold: float = 0.0,
+) -> tuple[
+    dict[tuple[int, int, int, int], dict[str, list]],
+    dict[str, object],
+]:
+    """Collect pure-nu3 transitions from raw ExoMol database, grouped by (lower_n3, upper_n3, lower_J, upper_J).
+
+    Returns (grouped_lines, metadata) where grouped_lines maps
+    (lower_n3, upper_n3, lower_J, upper_J) -> {"wavenumber": [...], "intensity": [...]}.
+    """
+    resolved_data_dir = dataset_dir(data_dir)
+    def_path = resolved_data_dir / f"{DATASET_STEM}.def"
+    states_path = resolved_data_dir / f"{DATASET_STEM}.states.bz2"
+    pf_path = resolved_data_dir / f"{DATASET_STEM}.pf"
+
+    metadata_def = parse_def_file(def_path)
+    pf_temps, pf_vals = load_partition_function(pf_path)
+    partition_function = interpolate_partition_function(pf_temps, pf_vals, temperature_k)
+    energies, g_totals, j_values, n1, n2, n3, n4, _symmetry = load_scan_state_arrays(
+        states_path, int(metadata_def["nstates"])
+    )
+    transition_files, _ = overlapping_transition_files(resolved_data_dir, wn_min=wn_min, wn_max=wn_max, wing=wing)
+
+    grouped: dict[tuple[int, int, int, int], dict[str, list]] = {}
+    stats = {"parsed": 0, "in_window": 0, "pure_nu3": 0, "kept": 0}
+
+    search_min = wn_min - wing
+    search_max = wn_max + wing
+    for path in transition_files:
+        for raw_line in iter_bz2_text_lines(path):
+            parts = raw_line.split()
+            if len(parts) != 3:
+                continue
+            upper_id = int(parts[0])
+            lower_id = int(parts[1])
+            a_value = float(parts[2])
+            stats["parsed"] += 1
+
+            wavenumber = energies[upper_id] - energies[lower_id]
+            if wavenumber < search_min or wavenumber > search_max:
+                continue
+            stats["in_window"] += 1
+
+            lower_n3 = int(n3[lower_id])
+            upper_n3 = int(n3[upper_id])
+            if upper_n3 <= lower_n3:
+                continue
+            if (lower_n3, upper_n3) not in DIRECT_NU3_PROGRESSIONS:
+                continue
+            if int(n1[lower_id]) != 0 or int(n1[upper_id]) != 0:
+                continue
+            if int(n2[lower_id]) != 0 or int(n2[upper_id]) != 0:
+                continue
+            if int(n4[lower_id]) != 0 or int(n4[upper_id]) != 0:
+                continue
+            stats["pure_nu3"] += 1
+
+            intensity = lte_line_intensity_cm_per_molecule(
+                wavenumber=wavenumber,
+                a_coefficient=a_value,
+                g_upper=g_totals[upper_id],
+                lower_energy_cm=energies[lower_id],
+                temperature_k=temperature_k,
+                partition_function=partition_function,
+            )
+            if intensity < intensity_threshold:
+                continue
+            stats["kept"] += 1
+
+            lower_j = int(j_values[lower_id])
+            upper_j = int(j_values[upper_id])
+            key = (lower_n3, upper_n3, lower_j, upper_j)
+            if key not in grouped:
+                grouped[key] = {"wavenumber": [], "intensity": []}
+            grouped[key]["wavenumber"].append(wavenumber)
+            grouped[key]["intensity"].append(intensity)
+
+    run_metadata: dict[str, object] = {
+        "data_dir": str(resolved_data_dir),
+        "temperature_k": temperature_k,
+        "partition_function": partition_function,
+        "pf_max_temperature_k": float(pf_temps[-1]),
+        "mass_da": metadata_def["mass_da"],
+        "gamma0": metadata_def["gamma0"],
+        "n_exponent": metadata_def["n_exponent"],
+        "stats": stats,
+    }
+    return grouped, run_metadata
 
 
 def render_cross_section(
@@ -435,7 +543,7 @@ def scan_band_types(
     def_path = resolved_data_dir / f"{DATASET_STEM}.def"
     states_path = resolved_data_dir / f"{DATASET_STEM}.states.bz2"
     metadata = parse_def_file(def_path)
-    energies, n1, n2, n3, n4, symmetry = load_scan_state_arrays(states_path, int(metadata["nstates"]))
+    energies, _g_totals, _j_values, n1, n2, n3, n4, symmetry = load_scan_state_arrays(states_path, int(metadata["nstates"]))
     transition_files, _ = overlapping_transition_files(resolved_data_dir, wn_min=window.wn_min, wn_max=window.wn_max)
 
     category_counts: Counter[tuple[int, int]] = Counter()
@@ -1964,4 +2072,333 @@ def extract_bands(*args, **kwargs):
     raise NotImplementedError(
         "ExoMol band-text extraction has not been ported into the first framework pass yet. "
         "Use scripts/extract_exomol_ch4_mm_pure_nu3_band_texts.py as the archived reference."
+    )
+
+
+_DIRECT_DELTA_J_COLORS: dict[int, tuple] = {
+    -1: plt.cm.tab10(0),
+     0: plt.cm.tab10(1),
+     1: plt.cm.tab10(2),
+}
+
+
+def _save_direct_absorbance_png(
+    path: Path,
+    *,
+    progression_label: str,
+    lower_n3: int,
+    upper_n3: int,
+    traces: list[dict[str, object]],
+    labeled_traces_by_delta_j: dict[int, list[dict[str, object]]],
+    wn_min: float,
+    wn_max: float,
+) -> Path:
+    ensure_directory(path.parent)
+    figure, axes = plt.subplots(4, 1, figsize=(16, 15), sharex=True, constrained_layout=True)
+    figure.suptitle(
+        f"{progression_label} ExoMol direct absorbance by J pair\n"
+        f"(0 0 {lower_n3} 0) -> (0 0 {upper_n3} 0)"
+    )
+    for axis, delta_j in zip(axes[:3], ABSORBANCE_DELTA_J_VALUES):
+        branch_color = _DIRECT_DELTA_J_COLORS.get(delta_j, plt.cm.tab10(3))
+        branch_traces = [t for t in traces if int(t["delta_j"]) == delta_j and bool(t["plotted_in_figure"])]
+        label_items = labeled_traces_by_delta_j.get(delta_j, [])
+        for trace in branch_traces:
+            axis.plot(trace["wavenumber"], trace["absorbance"], color=branch_color, linewidth=1.0, alpha=0.95)
+        for item in label_items:
+            axis.plot([item["peak_x"], item["label_x"]], [item["peak_y"], item["label_y"]], color=branch_color, linewidth=0.8, alpha=0.8)
+            axis.text(item["label_x"], item["label_y"], item["text"], color=branch_color, fontsize=8, ha="left", va="center",
+                      bbox={"facecolor": "white", "edgecolor": "none", "alpha": 0.75, "pad": 1.0})
+        axis.set_xlim(wn_min, wn_max)
+        y_min, y_max = compute_panel_y_limits(branch_traces, y_key="absorbance", label_items=label_items)
+        axis.set_ylim(y_min, y_max)
+        axis.set_ylabel("Absorbance")
+        axis.set_title(_delta_j_panel_title(delta_j, len(branch_traces)))
+        axis.grid(True, alpha=0.25, linewidth=0.5)
+        axis.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
+        if not branch_traces:
+            axis.text(0.5, 0.5, "No J pairs in this delta J class", transform=axis.transAxes, ha="center", va="center", fontsize=10, color="#666666")
+    overlay_axis = axes[3]
+    all_plotted = [t for t in traces if bool(t["plotted_in_figure"])]
+    legend_added: set[str] = set()
+    for trace in all_plotted:
+        dj = int(trace["delta_j"])
+        color = _DIRECT_DELTA_J_COLORS.get(dj, plt.cm.tab10(3))
+        label_str = f"\u0394J = {dj:+d}"
+        show_label = label_str not in legend_added
+        if show_label:
+            legend_added.add(label_str)
+        overlay_axis.plot(trace["wavenumber"], trace["absorbance"], color=color, linewidth=0.8, alpha=0.7,
+                          label=label_str if show_label else "_nolegend_")
+    overlay_axis.set_xlim(wn_min, wn_max)
+    y_min, y_max = compute_panel_y_limits(all_plotted, y_key="absorbance")
+    overlay_axis.set_ylim(y_min, y_max)
+    overlay_axis.set_ylabel("Absorbance")
+    overlay_axis.set_title(f"All \u0394J overlaid ({len(all_plotted)} J pairs)")
+    overlay_axis.grid(True, alpha=0.25, linewidth=0.5)
+    overlay_axis.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
+    overlay_axis.legend(loc="upper right", fontsize=8, framealpha=0.8)
+    overlay_axis.set_xlabel("Wavenumber (cm^-1)")
+    figure.savefig(path, dpi=200)
+    plt.close(figure)
+    return path
+
+
+def plot_exomol_direct_nu3_absorbance_progressions(
+    *,
+    data_dir: Path | None = None,
+    output_dir: Path | None = None,
+    wn_min: float = 2500.0,
+    wn_max: float = 3500.0,
+    wn_step: float = 0.001,
+    temperature_k: float = 600.0,
+    pressure_torr: float = 3.0,
+    mole_fraction: float = 0.008,
+    path_length_cm: float = 100.0,
+    line_cutoff: float = 0.5,
+    intensity_threshold: float = 0.0,
+    label_top_n_per_delta_j: int = 8,
+    html_max_points: int = 5000,
+    forced_j_pairs: tuple[tuple[int, int], ...] | None = None,
+) -> SummaryResult:
+    """Render nu3 absorbance progressions directly from the ExoMol MM database at arbitrary temperature."""
+    if wn_max <= wn_min:
+        raise ValueError("wn_max must be greater than wn_min")
+    if wn_step <= 0.0:
+        raise ValueError("wn_step must be positive")
+    if temperature_k <= 0.0:
+        raise ValueError("temperature_k must be positive")
+
+    effective_forced_j_pairs = _merge_forced_j_pairs(DEFAULT_FORCED_ABSORBANCE_J_PAIRS, forced_j_pairs)
+    paths = default_paths()
+    resolved_output_dir = ensure_directory(
+        (output_dir or (paths.artifacts_dir / "exomol_direct_nu3_absorbance")).resolve()
+    )
+
+    grouped_lines, run_metadata = collect_nu3_transitions_by_jpair(
+        data_dir=data_dir,
+        wn_min=wn_min,
+        wn_max=wn_max,
+        wing=line_cutoff,
+        temperature_k=temperature_k,
+        intensity_threshold=intensity_threshold,
+    )
+
+    mass_da = float(run_metadata["mass_da"])
+    gamma0 = float(run_metadata["gamma0"])
+    n_exponent = float(run_metadata["n_exponent"])
+
+    case = GasCase(
+        temperature_k=temperature_k,
+        pressure_torr=pressure_torr,
+        mole_fraction=mole_fraction,
+        path_length_cm=path_length_cm,
+    )
+    window = SpectralWindow(wn_min=wn_min, wn_max=wn_max, wn_step=wn_step)
+    grid = build_grid(window)
+
+    summary_rows: list[dict[str, object]] = []
+    for lower_n3, upper_n3 in DIRECT_NU3_PROGRESSIONS:
+        progression_label = f"nu3 {lower_n3}->{upper_n3}"
+        progression_slug = f"nu3_{lower_n3}_to_{upper_n3}"
+
+        jpair_keys = sorted(
+            (key for key in grouped_lines if key[0] == lower_n3 and key[1] == upper_n3),
+            key=lambda k: (k[2], k[3]),
+        )
+
+        traces: list[dict[str, object]] = []
+        for index, key in enumerate(jpair_keys):
+            _ln3, _un3, lower_j, upper_j = key
+            payload = grouped_lines[key]
+            line_centers = np.asarray(payload["wavenumber"], dtype=np.float64)
+            line_intensities = np.asarray(payload["intensity"], dtype=np.float64)
+            absorbance = render_absorbance_on_grid(
+                grid,
+                case=case,
+                line_centers=line_centers,
+                line_intensities=line_intensities,
+                mass_da=mass_da,
+                gamma0=gamma0,
+                n_exponent=n_exponent,
+                line_cutoff=line_cutoff,
+            )
+            peak_abs = float(np.max(absorbance)) if absorbance.size > 0 else 0.0
+            integrated_abs = float(np.trapezoid(absorbance, grid)) if absorbance.size > 0 else 0.0
+            traces.append(
+                {
+                    "trace_index": index + 1,
+                    "lower_j": lower_j,
+                    "upper_j": upper_j,
+                    "delta_j": _delta_j_value(lower_j, upper_j),
+                    "branch_label": _delta_j_branch_label(_delta_j_value(lower_j, upper_j)),
+                    "jpair_label": _format_jpair_label(lower_j, upper_j),
+                    "wavenumber": grid,
+                    "absorbance": absorbance,
+                    "grid_point_count": int(grid.size),
+                    "line_count": int(line_centers.size),
+                    "peak_absorbance": peak_abs,
+                    "integrated_absorbance": integrated_abs,
+                    "source_file_count": 0,
+                    "plotted_in_figure": _delta_j_value(lower_j, upper_j) in ABSORBANCE_DELTA_J_VALUES,
+                }
+            )
+
+        if not traces:
+            continue
+
+        for index, trace in enumerate(traces):
+            trace["color"] = _color_for_index(index, len(traces))
+
+        labeled_candidates_by_delta_j, labeled_names_by_delta_j, branch_rank_lookup = _branch_label_candidates(
+            traces,
+            label_top_n_per_delta_j,
+            y_key="absorbance",
+            peak_key="peak_absorbance",
+            total_key="integrated_absorbance",
+            forced_j_pairs=effective_forced_j_pairs,
+        )
+        labeled_traces_by_delta_j = {
+            delta_j: _label_positions(labeled_candidates_by_delta_j.get(delta_j, []), wn_min, wn_max)
+            for delta_j in ABSORBANCE_DELTA_J_VALUES
+        }
+        labeled_names = {
+            label for branch_names in labeled_names_by_delta_j.values() for label in branch_names
+        }
+
+        ranked_for_mapping = sorted(
+            traces,
+            key=lambda trace: (float(trace["peak_absorbance"]), float(trace["integrated_absorbance"]),
+                               -int(trace["lower_j"]), -int(trace["upper_j"])),
+            reverse=True,
+        )
+        rank_lookup = {
+            (int(t["lower_j"]), int(t["upper_j"])): rank
+            for rank, t in enumerate(ranked_for_mapping, start=1)
+        }
+        mapping_rows: list[dict[str, object]] = []
+        for trace in traces:
+            trace_key = (int(trace["lower_j"]), int(trace["upper_j"]))
+            mapping_rows.append(
+                {
+                    "trace_index": trace["trace_index"],
+                    "strength_rank": rank_lookup[trace_key],
+                    "delta_j": trace["delta_j"],
+                    "branch_label": trace["branch_label"],
+                    "delta_j_strength_rank": branch_rank_lookup.get(trace_key, 0),
+                    "lower_j": trace["lower_j"],
+                    "upper_j": trace["upper_j"],
+                    "jpair_label": trace["jpair_label"],
+                    "line_count": trace["line_count"],
+                    "grid_point_count": trace["grid_point_count"],
+                    "peak_absorbance": f"{float(trace['peak_absorbance']):.12e}",
+                    "integrated_absorbance": f"{float(trace['integrated_absorbance']):.12e}",
+                    "color_hex": trace["color"],
+                    "plotted_in_figure": "yes" if bool(trace["plotted_in_figure"]) else "no",
+                    "labeled_on_figure": "yes" if trace["jpair_label"] in labeled_names else "no",
+                }
+            )
+
+        branch_counts = _summarize_delta_j_counts(traces)
+        labeled_summary = _format_branch_label_summary(labeled_traces_by_delta_j)
+        png_path = _save_direct_absorbance_png(
+            resolved_output_dir / f"{progression_slug}_absorbance.png",
+            progression_label=progression_label,
+            lower_n3=lower_n3,
+            upper_n3=upper_n3,
+            traces=traces,
+            labeled_traces_by_delta_j=labeled_traces_by_delta_j,
+            wn_min=wn_min,
+            wn_max=wn_max,
+        )
+        html_path = _save_absorbance_progression_html(
+            resolved_output_dir / f"{progression_slug}_absorbance.html",
+            progression_label=progression_label,
+            lower_mode=(0, 0, lower_n3, 0),
+            upper_mode=(0, 0, upper_n3, 0),
+            traces=traces,
+            labeled_traces_by_delta_j=labeled_traces_by_delta_j,
+            wn_min=wn_min,
+            wn_max=wn_max,
+            html_max_points=html_max_points,
+        )
+        mapping_path = write_rows_csv(
+            resolved_output_dir / f"{progression_slug}_jpairs.csv",
+            mapping_rows,
+            fieldnames=[
+                "trace_index", "strength_rank", "delta_j", "branch_label",
+                "delta_j_strength_rank", "lower_j", "upper_j", "jpair_label",
+                "line_count", "grid_point_count", "peak_absorbance", "integrated_absorbance",
+                "color_hex", "plotted_in_figure", "labeled_on_figure",
+            ],
+        )
+
+        summary_rows.append(
+            {
+                "progression_label": progression_label,
+                "lower_mode": f"0 0 {lower_n3} 0",
+                "upper_mode": f"0 0 {upper_n3} 0",
+                "jpair_count": len(traces),
+                "grid_point_count": int(grid.size),
+                "delta_j_minus_1_count": branch_counts[-1],
+                "delta_j_0_count": branch_counts[0],
+                "delta_j_plus_1_count": branch_counts[1],
+                "labeled_j_pairs": labeled_summary,
+                "png_file": png_path.name,
+                "html_file": html_path.name,
+                "mapping_csv": mapping_path.name,
+            }
+        )
+
+    summary_csv_path = write_rows_csv(
+        resolved_output_dir / "progression_summary.csv",
+        summary_rows,
+        fieldnames=[
+            "progression_label", "lower_mode", "upper_mode",
+            "jpair_count", "grid_point_count",
+            "delta_j_minus_1_count", "delta_j_0_count", "delta_j_plus_1_count",
+            "labeled_j_pairs", "png_file", "html_file", "mapping_csv",
+        ],
+    )
+
+    stats = run_metadata["stats"]
+    report_lines = [
+        "# ExoMol Direct nu3 Absorbance Progressions",
+        "",
+        f"- Data source: `{run_metadata['data_dir']}`",
+        f"- Rendering path: direct Voigt from ExoMol `.trans.bz2` + `.states.bz2` (no HAPI, no preprocessed band texts)",
+        f"- Wavenumber window: `{wn_min:g}` to `{wn_max:g} cm^-1` with `step = {wn_step:g} cm^-1`",
+        f"- Temperature: `{temperature_k:g} K`",
+        f"- Partition function at {temperature_k:g} K: `{run_metadata['partition_function']:.6f}`",
+        f"- PF max temperature: `{run_metadata['pf_max_temperature_k']:g} K`",
+        f"- Pressure: `{pressure_torr:g} Torr`",
+        f"- Mole fraction: `{mole_fraction:g}`",
+        f"- Path length: `{path_length_cm:g} cm`",
+        f"- Broadening: `gamma0 = {gamma0:g} cm^-1/bar`, `n_exponent = {n_exponent:g}` (from `.def` file)",
+        f"- Line cutoff: `{line_cutoff:g} cm^-1`",
+        f"- Intensity threshold: `{intensity_threshold:.3e}`",
+        f"- Transitions parsed: `{stats['parsed']}`",
+        f"- In spectral window: `{stats['in_window']}`",
+        f"- Pure nu3 transitions: `{stats['pure_nu3']}`",
+        f"- Kept after intensity filter: `{stats['kept']}`",
+        f"- Summary CSV: [{summary_csv_path.name}]({summary_csv_path.name})",
+        "",
+    ]
+    for row in summary_rows:
+        report_lines.extend([
+            f"## {row['progression_label']}",
+            "",
+            f"- J pairs: `{row['jpair_count']}`",
+            f"- Grid points: `{row['grid_point_count']}`",
+            f"- PNG: [{row['png_file']}]({row['png_file']})",
+            f"- HTML: [{row['html_file']}]({row['html_file']})",
+            f"- J-pair CSV: [{row['mapping_csv']}]({row['mapping_csv']})",
+            "",
+        ])
+    report_path = write_markdown(resolved_output_dir / "report.md", "\n".join(report_lines))
+
+    return SummaryResult(
+        rows=summary_rows,
+        csv_path=summary_csv_path,
+        metadata={"report_path": str(report_path)},
     )
