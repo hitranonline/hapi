@@ -1,6 +1,8 @@
 *.pyc
 *.bak
 __pycache__/
+._*
+.sisyphus/
 build/
 dist/
 hitran_api.egg-info/
