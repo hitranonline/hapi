@@ -50,7 +50,7 @@ SORTED_NU3_FILENAME_PATTERN = re.compile(
     r"_T(?P<temperature>[0-9.]+)K\.txt$"
 )
 J_VALUE_PATTERN = re.compile(r"(\d+)")
-REQUIRED_ABSORBANCE_LABELS = ("J 2->3", "J 3->4")
+REQUIRED_ABSORBANCE_LABELS = ("J 3<-2", "J 4<-3")
 ABSORBANCE_DELTA_J_VALUES = (-1, 0, 1)
 DEFAULT_FORCED_ABSORBANCE_J_PAIRS = ((2, 3), (3, 4))
 
@@ -595,7 +595,7 @@ def scan_band_types(
         upper_q = int(upper_label.split()[2])
         rows.append(
             {
-                "category": f"nu3 {lower_q}->{upper_q}",
+                "category": f"nu3 {upper_q}<-{lower_q}",
                 "nu3_lower": lower_q,
                 "nu3_upper": upper_q,
                 "lower_label_exomol": lower_label,
@@ -612,7 +612,7 @@ def scan_band_types(
             "window_transitions_found": total_in_window,
             "nu3_transitions_kept": total_kept,
             "distinct_exact_pairs": len(exact_counts),
-            "category_counts": {f"{low}->{high}": count for (low, high), count in sorted(category_counts.items())},
+            "category_counts": {f"{high}<-{low}": count for (low, high), count in sorted(category_counts.items())},
             "top_exact_count": print_top_exact,
         },
     )
@@ -648,7 +648,7 @@ def _parse_sorted_nu3_filename(path: Path) -> dict[str, object]:
 
 
 def _progression_label(lower_mode: tuple[int, int, int, int], upper_mode: tuple[int, int, int, int]) -> str:
-    return f"nu3 {lower_mode[2]}->{upper_mode[2]}"
+    return f"nu3 {upper_mode[2]}<-{lower_mode[2]}"
 
 
 def _progression_slug(lower_mode: tuple[int, int, int, int], upper_mode: tuple[int, int, int, int]) -> str:
@@ -690,7 +690,7 @@ def _color_for_index(index: int, total: int) -> str:
 
 
 def _format_jpair_label(lower_j: int, upper_j: int) -> str:
-    return f"J {lower_j}->{upper_j}"
+    return f"J {upper_j}<-{lower_j}"
 
 
 def _delta_j_value(lower_j: int, upper_j: int) -> int:
@@ -945,7 +945,7 @@ def _save_progression_png(
     axis.set_ylabel("Intensity (cm/molecule)")
     axis.set_title(
         f"{progression_label} intensity by J pair\n"
-        f"{_mode_label(lower_mode)} -> {_mode_label(upper_mode)}"
+        f"{_mode_label(upper_mode)} <- {_mode_label(lower_mode)}"
     )
     axis.grid(True, alpha=0.25, linewidth=0.5)
     axis.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
@@ -1012,7 +1012,7 @@ def _save_progression_html(
     figure.update_layout(
         title=(
             f"{progression_label} intensity by J pair"
-            f"<br><sup>{_mode_label(lower_mode)} -> {_mode_label(upper_mode)}</sup>"
+            f"<br><sup>{_mode_label(upper_mode)} <- {_mode_label(lower_mode)}</sup>"
         ),
         template="plotly_white",
         xaxis_title="Wavenumber (cm^-1)",
@@ -1231,7 +1231,7 @@ def plot_sorted_nu3_intensity_progressions(
             [
                 f"## {row['progression_label']}",
                 "",
-                f"- Modes: `{row['lower_mode']} -> {row['upper_mode']}`",
+                f"- Modes: `{row['upper_mode']} <- {row['lower_mode']}`",
                 f"- Files merged: `{row['source_file_count']}`",
                 f"- Rows plotted: `{row['row_count']}`",
                 f"- J-pair curves: `{row['jpair_count']}`",
@@ -1327,7 +1327,7 @@ def _save_validation_png(
     axes[0].plot(grid, legacy_absorbance, color="#222222", linewidth=1.2, label="Legacy render")
     axes[0].plot(grid, module_absorbance, color="#1f77b4", linewidth=1.0, alpha=0.85, label="Module render")
     axes[0].set_ylabel("Absorbance")
-    axes[0].set_title("Absorbance module validation: nu3 0->1")
+    axes[0].set_title("Absorbance module validation: nu3 1<-0")
     axes[0].grid(True, alpha=0.25, linewidth=0.5)
     axes[0].legend(loc="upper right")
 
@@ -1361,7 +1361,7 @@ def _save_validation_html(
     figure.add_trace(go.Scattergl(x=grid_plot, y=module_plot, mode="lines", name="Module render", line={"color": "#1f77b4"}))
     figure.add_trace(go.Scattergl(x=grid_plot, y=delta_plot, mode="lines", name="Module - Legacy", line={"color": "#d62728"}, yaxis="y2"))
     figure.update_layout(
-        title="Absorbance module validation: nu3 0->1",
+        title="Absorbance module validation: nu3 1<-0",
         template="plotly_white",
         xaxis_title="Wavenumber (cm^-1)",
         yaxis_title="Absorbance",
@@ -1414,7 +1414,7 @@ def validate_sorted_nu3_absorbance_module(
         None,
     )
     if target is None:
-        raise RuntimeError("Could not find the sorted nu3 0->1 progression for validation")
+        raise RuntimeError("Could not find the sorted nu3 1<-0 progression for validation")
 
     all_centers: list[float] = []
     all_intensities: list[float] = []
@@ -1425,7 +1425,7 @@ def validate_sorted_nu3_absorbance_module(
     line_centers = np.asarray(all_centers, dtype=np.float64)
     line_intensities = np.asarray(all_intensities, dtype=np.float64)
     if line_centers.size == 0:
-        raise RuntimeError("Validation progression 0->1 has no lines after filtering")
+        raise RuntimeError("Validation progression 1<-0 has no lines after filtering")
 
     metadata = parse_def_file(dataset_dir() / f"{DATASET_STEM}.def")
     grid = build_grid(window)
@@ -1463,7 +1463,7 @@ def validate_sorted_nu3_absorbance_module(
     module_peak_index = int(np.argmax(module_absorbance))
     legacy_peak_index = int(np.argmax(legacy_absorbance))
     metrics_row = {
-        "progression_label": "nu3 0->1",
+        "progression_label": "nu3 1<-0",
         "line_count": int(line_centers.size),
         "grid_point_count": int(grid.size),
         "max_abs_difference": f"{float(np.max(np.abs(delta_absorbance))):.12e}",
@@ -1501,7 +1501,7 @@ def validate_sorted_nu3_absorbance_module(
     report_lines = [
         "# Absorbance Module Validation",
         "",
-        "- Validation target: `nu3 0->1` from the sorted ExoMol folder",
+        "- Validation target: `nu3 1<-0` from the sorted ExoMol folder",
         "- Comparison: new `research.absorbance` module vs existing `research.exomol.render_cross_section` path",
         "- Note: the sorted line intensities are exported at `296 K`, so the validation case keeps `T = 296 K`",
         f"- Window: `{wn_min:g}` to `{wn_max:g} cm^-1` with `step = {wn_step:g} cm^-1`",
@@ -1550,7 +1550,7 @@ def _save_absorbance_progression_png(
     figure, axes = plt.subplots(3, 1, figsize=(16, 12), sharex=True, constrained_layout=True)
     figure.suptitle(
         f"{progression_label} absorbance by J pair, split by delta J\n"
-        f"{_mode_label(lower_mode)} -> {_mode_label(upper_mode)}"
+        f"{_mode_label(upper_mode)} <- {_mode_label(lower_mode)}"
     )
 
     for axis, delta_j in zip(axes, ABSORBANCE_DELTA_J_VALUES):
@@ -1712,7 +1712,7 @@ def _save_absorbance_progression_html(
     figure.update_layout(
         title=(
             f"{progression_label} absorbance by J pair, split by delta J"
-            f"<br><sup>{_mode_label(lower_mode)} -> {_mode_label(upper_mode)}</sup>"
+            f"<br><sup>{_mode_label(upper_mode)} <- {_mode_label(lower_mode)}</sup>"
         ),
         template="plotly_white",
         xaxis_title="Wavenumber (cm^-1)",
@@ -2027,7 +2027,7 @@ def plot_sorted_nu3_absorbance_progressions(
             [
                 f"## {row['progression_label']}",
                 "",
-                f"- Modes: `{row['lower_mode']} -> {row['upper_mode']}`",
+                f"- Modes: `{row['upper_mode']} <- {row['lower_mode']}`",
                 f"- Files merged: `{row['source_file_count']}`",
                 f"- Lines kept after filtering: `{row['row_count']}`",
                 f"- J-pair curves: `{row['jpair_count']}`",
@@ -2199,7 +2199,7 @@ def plot_exomol_direct_nu3_absorbance_progressions(
 
     summary_rows: list[dict[str, object]] = []
     for lower_n3, upper_n3 in DIRECT_NU3_PROGRESSIONS:
-        progression_label = f"nu3 {lower_n3}->{upper_n3}"
+        progression_label = f"nu3 {upper_n3}<-{lower_n3}"
         progression_slug = f"nu3_{lower_n3}_to_{upper_n3}"
 
         jpair_keys = sorted(

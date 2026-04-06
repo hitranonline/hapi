@@ -24,13 +24,13 @@ from research.combined import SOURCE_CHOICES, plot_combined_exomol_i1_absorbance
 from research.hitran import band_line_text_dir
 
 
-J_PAIR_PATTERN = re.compile(r"^\s*(\d+)\s*->\s*(\d+)\s*$")
+J_PAIR_PATTERN = re.compile(r"^\s*(\d+)\s*<-\s*(\d+)\s*$")
 
 
 def parse_j_pair(text: str) -> tuple[int, int]:
     match = J_PAIR_PATTERN.fullmatch(text)
     if match is None:
-        raise argparse.ArgumentTypeError("J pair must look like '2->3'")
+        raise argparse.ArgumentTypeError("J pair must look like '2<-3'")
     return int(match.group(1)), int(match.group(2))
 
 
@@ -120,6 +120,12 @@ def parse_args() -> argparse.Namespace:
         default=5000,
         help="Maximum points per J-pair trace in the HTML figures.",
     )
+    parser.add_argument(
+        "--save-raw-data",
+        action="store_true",
+        default=False,
+        help="Save raw wavenumber + absorbance arrays per progression as .npz + CSV sidecar.",
+    )
     return parser.parse_args()
 
 
@@ -144,6 +150,7 @@ def main() -> int:
         label_top_n_per_delta_j=args.label_top_n_per_delta_j,
         html_max_points=args.html_max_points,
         forced_j_pairs=None if args.forced_j_pairs is None else tuple(args.forced_j_pairs),
+        save_raw_data=args.save_raw_data,
     )
     print(f"progressions written: {len(result.rows)}")
     print(f"summary csv: {result.csv_path}")

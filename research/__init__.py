@@ -14,7 +14,7 @@ from .models import (
 )
 
 
-_LAZY_MODULES = {"absorbance", "bands", "compare", "exomol", "hitran", "io", "models", "spectra"}
+_LAZY_MODULES = {"absorbance", "bands", "compare", "compare_cases", "exomol", "hitran", "io", "models", "spectra"}
 
 
 def __getattr__(name: str):
@@ -28,6 +28,7 @@ def __getattr__(name: str):
 __all__ = [
     "bands",
     "compare",
+    "compare_cases",
     "absorbance",
     "exomol",
     "hitran",

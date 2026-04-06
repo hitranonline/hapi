@@ -65,7 +65,7 @@ PURE_NU3_PROGRESSIONS = tuple(
 
 
 def _combined_progression_label(lower_mode: tuple[int, int, int, int], upper_mode: tuple[int, int, int, int]) -> str:
-    return f"nu3 {lower_mode[2]}->{upper_mode[2]}"
+    return f"nu3 {upper_mode[2]}<-{lower_mode[2]}"
 
 
 def _combined_progression_slug(lower_mode: tuple[int, int, int, int], upper_mode: tuple[int, int, int, int]) -> str:
@@ -258,6 +258,54 @@ def _render_hapi_absorbance_from_raw_lines(
         hapi.dropTable(temp_table)
 
 
+def _save_raw_progression_data(
+    output_dir: Path,
+    *,
+    progression_slug: str,
+    grid: np.ndarray,
+    traces: list[dict[str, object]],
+    temperature_k: float,
+    pressure_torr: float,
+    mole_fraction: float,
+    path_length_cm: float,
+) -> tuple[Path, Path]:
+    """Save raw (wavenumber, absorbance) per J-pair to .npz + CSV sidecar.
+
+    Returns (npz_path, csv_path).
+    """
+    ensure_directory(output_dir)
+    arrays: dict[str, np.ndarray] = {"wavenumber": grid}
+    meta_rows: list[dict[str, object]] = []
+
+    for trace in traces:
+        lo = int(trace["lower_j"])
+        hi = int(trace["upper_j"])
+        key = f"abs_{lo}_{hi}"
+        arrays[key] = np.asarray(trace["absorbance"], dtype=np.float64)
+        meta_rows.append({
+            "lower_j": lo,
+            "upper_j": hi,
+            "delta_j": int(trace["delta_j"]),
+            "jpair_label": trace["jpair_label"],
+            "peak_absorbance": float(trace["peak_absorbance"]),
+            "integrated_absorbance": float(trace["integrated_absorbance"]),
+            "array_key": key,
+        })
+
+    npz_path = output_dir / f"{progression_slug}_raw.npz"
+    np.savez_compressed(npz_path, **arrays)
+
+    csv_path = output_dir / f"{progression_slug}_raw_meta.csv"
+    write_rows_csv(
+        csv_path,
+        meta_rows,
+        fieldnames=["lower_j", "upper_j", "delta_j", "jpair_label",
+                     "peak_absorbance", "integrated_absorbance", "array_key"],
+    )
+
+    return npz_path, csv_path
+
+
 _DELTA_J_COLORS: dict[int | str, tuple] = {
     -1: plt.cm.tab10(0),
      0: plt.cm.tab10(1),
@@ -280,7 +328,7 @@ def _save_combined_progression_png(
     figure, axes = plt.subplots(4, 1, figsize=(16, 15), sharex=True, constrained_layout=True)
     figure.suptitle(
         f"{progression_label} combined absorbance by J pair, split by delta J\n"
-        f"{_mode_label(lower_mode)} -> {_mode_label(upper_mode)}"
+        f"{_mode_label(upper_mode)} <- {_mode_label(lower_mode)}"
     )
     for axis, delta_j in zip(axes[:3], ABSORBANCE_DELTA_J_VALUES):
         branch_color = _DELTA_J_COLORS.get(delta_j, plt.cm.tab10(3))
@@ -518,7 +566,7 @@ def _save_combined_progression_html(
     figure.update_layout(
         title=(
             f"{progression_label} combined absorbance by J pair"
-            f"<br><sup>{_mode_label(lower_mode)} -> {_mode_label(upper_mode)}</sup>"
+            f"<br><sup>{_mode_label(upper_mode)} <- {_mode_label(lower_mode)}</sup>"
         ),
         template="plotly_white",
         xaxis_title="Wavenumber (cm^-1)",
@@ -1015,7 +1063,7 @@ def plot_combined_pure_nu3_absorbance_progressions(
             [
                 f"## {row['progression_label']}",
                 "",
-                f"- Modes: `{row['lower_mode']} -> {row['upper_mode']}`",
+                f"- Modes: `{row['upper_mode']} <- {row['lower_mode']}`",
                 f"- J-pair curves: `{row['jpair_count']}`",
                 f"- Shared across both sources: `{row['shared_jpair_count']}`",
                 f"- HITRAN only: `{row['hitran_only_jpair_count']}`",
@@ -1066,6 +1114,7 @@ def plot_combined_exomol_i1_absorbance_progressions(
     label_top_n_per_delta_j: int = 8,
     html_max_points: int = 5000,
     forced_j_pairs: tuple[tuple[int, int], ...] | None = None,
+    save_raw_data: bool = False,
 ) -> SummaryResult:
     if wn_max <= wn_min:
         raise ValueError("wn_max must be greater than wn_min")
@@ -1486,6 +1535,18 @@ def plot_combined_exomol_i1_absorbance_progressions(
                 "mapping_csv": mapping_path.name,
             }
         )
+        if save_raw_data:
+            _save_raw_progression_data(
+                resolved_output_dir,
+                progression_slug=progression_slug,
+                grid=grid,
+                traces=traces,
+                temperature_k=temperature_k,
+                pressure_torr=pressure_torr,
+                mole_fraction=mole_fraction,
+                path_length_cm=path_length_cm,
+            )
+
 
     summary_csv_path = write_rows_csv(
         resolved_output_dir / "progression_summary.csv",
@@ -1566,7 +1627,7 @@ def plot_combined_exomol_i1_absorbance_progressions(
             [
                 f"## {row['progression_label']}",
                 "",
-                f"- Modes: `{row['lower_mode']} -> {row['upper_mode']}`",
+                f"- Modes: `{row['upper_mode']} <- {row['lower_mode']}`",
                 f"- J-pair curves: `{row['jpair_count']}`",
                 f"- Shared across both sources: `{row['shared_jpair_count']}`",
                 f"- HITRAN only: `{row['hitran_only_jpair_count']}`",
