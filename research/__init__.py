@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from importlib import import_module
+from typing import TYPE_CHECKING
 
 from .models import (
     BandExportResult,
@@ -13,16 +14,36 @@ from .models import (
     SummaryResult,
 )
 
+if TYPE_CHECKING:
+    from . import (
+        absorbance,
+        bands,
+        ch4_treanor,
+        combined,
+        compare,
+        compare_cases,
+        exomol,
+        hitran,
+        io,
+        models,
+        nonlte,
+        spectra,
+        treanor,
+    )
+
 
 _LAZY_MODULES = {
     "absorbance",
     "bands",
+    "combined",
+    "ch4_treanor",
     "compare",
     "compare_cases",
     "exomol",
     "hitran",
     "io",
     "models",
+    "nonlte",
     "spectra",
     "treanor",
 }
@@ -38,6 +59,8 @@ def __getattr__(name: str):
 
 __all__ = [
     "bands",
+    "combined",
+    "ch4_treanor",
     "compare",
     "compare_cases",
     "absorbance",
@@ -45,6 +68,7 @@ __all__ = [
     "hitran",
     "io",
     "models",
+    "nonlte",
     "spectra",
     "treanor",
     "BandExportResult",
