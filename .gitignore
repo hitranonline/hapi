@@ -13,6 +13,10 @@ venv/
 env/
 .vscode/
 hitran_db/
+.omc
+.claude
+.ruff_cache
+
 
 artifacts/
 band_intensity_comparisons/
