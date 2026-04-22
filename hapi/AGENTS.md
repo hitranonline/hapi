@@ -1,3 +1,6 @@
+<!-- Parent: ../AGENTS.md -->
+<!-- Generated: 2026-04-03 | Updated: 2026-04-22 -->
+
 # hapi/ — Upstream HITRAN API Engine
 
 ## OVERVIEW
