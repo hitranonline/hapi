@@ -2,11 +2,29 @@
 
 #from distutils.core import setup
 from setuptools import setup
-from hapi.hapi import HAPI_VERSION, HAPI_HISTORY
 
+import ast
 import re
 import sys
 import shutil
+
+
+def read_package_metadata():
+    with open('hapi/hapi.py', 'r', encoding='utf-8') as f:
+        module_ast = ast.parse(f.read(), filename='hapi/hapi.py')
+
+    metadata = {}
+    for node in module_ast.body:
+        if not isinstance(node, ast.Assign) or len(node.targets) != 1:
+            continue
+        target = node.targets[0]
+        if isinstance(target, ast.Name) and target.id in {'HAPI_VERSION', 'HAPI_HISTORY'}:
+            metadata[target.id] = ast.literal_eval(node.value)
+
+    return metadata['HAPI_VERSION'], metadata['HAPI_HISTORY']
+
+
+HAPI_VERSION, HAPI_HISTORY = read_package_metadata()
 
 # Update the README file
 shutil.copy('README.md','README.bak')
@@ -47,5 +65,6 @@ setup(
     name='hitran-api',
     version=HAPI_VERSION,
     packages=['hapi',],
+    install_requires=['numpy'],
     license='MIT',
 )
