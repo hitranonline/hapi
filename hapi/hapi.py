@@ -51971,9 +51971,9 @@ def pcqsdhc(sg0,GamD,Gam0,Gam2,Shift0,Shift2,anuVC,eta,sg,Ylm=0.0):
         index_Z1 = abs(Z1) <= 4.0e3
         index_NOT_Z1 = ~index_Z1
         if any(index_Z1):
-            Bterm_GLOBAL = rpi*cte*((1.0e0 - Z1**2)*__ComplexType__(WR1 + 1.0e0j*WI1) + Z1/rpi)
+            Bterm_GLOBAL[index_Z1] = rpi*cte*((1.0e0 - Z1[index_Z1]**2)*__ComplexType__(WR1[index_Z1] + 1.0e0j*WI1[index_Z1]) + Z1[index_Z1]/rpi)
         if any(index_NOT_Z1):
-            Bterm_GLOBAL = cte*(rpi*__ComplexType__(WR1 + 1.0e0j*WI1) + 0.5e0/Z1 - 0.75e0/(Z1**3))
+            Bterm_GLOBAL[index_NOT_Z1] = cte*(rpi*__ComplexType__(WR1[index_NOT_Z1] + 1.0e0j*WI1[index_NOT_Z1]) + 0.5e0/Z1[index_NOT_Z1] - 0.75e0/(Z1[index_NOT_Z1]**3))
     else:
         # PART2, PART3 AND PART4   (PART4 IS A MAIN PART)
 
