@@ -802,6 +802,9 @@ PARAMETER_META = CaselessDict(
   "deltap_SDV_self_296" : {
     "default_fmt" : "%9.6f",
   },
+  "delta_SDV_2_air_296" : {
+    "default_fmt" : "%9.6f",
+  },
 })
 
 def getFullTableAndHeaderName(TableName,ext=None):
