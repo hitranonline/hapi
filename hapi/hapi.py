@@ -912,6 +912,29 @@ def formatString(par_format,par_value,lang='FORTRAN'):
              result = '%%%ds' % lng % (res[0:1]+res[2:])
     return result
 
+# HITRAN stores local_iso_id in a single character: '1'...'9' for the first nine
+# isotopologues, then '0' for 10, 'A' for 11, 'B' for 12 and on through the
+# alphabet. The declared format is '%1d', so plain int()/'%1d' cannot round-trip
+# it: reading gives 0 for the tenth isotopologue and raises ValueError for the
+# later ones, and writing overflows the one-character field, shifting every
+# following column of the 160-character record. CO2 is the common case, having
+# twelve isotopologues.
+
+def parse_local_iso_id(raw):
+    # decode the single-character HITRAN local isotopologue ID
+    s = raw.strip()
+    if len(s)==1:
+       if s=='0': return 10
+       if s.isalpha(): return ord(s.upper())-ord('A')+11
+    return int(s)
+
+def format_local_iso_id(par_value):
+    # encode local_iso_id back into its single-character HITRAN form
+    par_value = int(par_value)
+    if par_value<10: return '%d' % par_value
+    if par_value==10: return '0'
+    return chr(ord('A')+par_value-11)
+
 def putRowObjectToString(RowObject):
     # serialize RowObject to string
     # TODO: support different languages (C,Fortran)
@@ -921,7 +944,10 @@ def putRowObjectToString(RowObject):
         #output_string += par_format % par_value
         # Fortran formatting
         #print 'par_name,par_value,par_format: '+str((par_name,par_value,par_format))
-        output_string += formatString(par_format,par_value)
+        if par_name=='local_iso_id' and par_format=='%1d':
+           output_string += format_local_iso_id(par_value)
+        else:
+           output_string += formatString(par_format,par_value)
     return output_string
 
 # Parameter nicknames are hard-coded.
@@ -974,7 +1000,9 @@ def getRowObjectFromString(input_string,TableName):
         (lng,trail,lngpnt,ty) = re.search(regex,par_format).groups()
         lng = int(lng)
         par_value = input_string[pos:(pos+lng)]
-        if ty=='d': # integer value
+        if par_name=='local_iso_id' and lng==1: # single-character HITRAN encoding
+           par_value = parse_local_iso_id(par_value)
+        elif ty=='d': # integer value
            par_value = int(par_value)
         elif ty.lower() in set(['e','f']): # float value
            par_value = float(par_value)
