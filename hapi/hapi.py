@@ -52854,6 +52854,7 @@ def environGetArguments_SDVoigt_Delta0_default(broadener,TRANS):
             },
             'Coef':{
                 'name': 'deltap_SDV_%s_%d'%(broadener,T_ref),
+                'default': 0,
             },
         },
     ]
